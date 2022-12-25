@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     event::{Event, EventId},
-    goal::{Goal, GoalEvent, GoalId},
+    goal::{Goal, GoalId, PopulatedGoal},
     query::TimeOfDayConfiguration,
 };
 
-use self::goal_traversal::populate_goal_tree;
+use self::goal_traversal::{populate_goal_tree, visit_tree_with_predicate};
 
 pub struct ProfileAndDateTime<'a>(pub &'a mut Profile, pub DateTime<Utc>);
 
@@ -45,7 +45,7 @@ pub mod goal_traversal {
 
     /// Visit goals in a goal child tree. This function is especially useful for building
     /// a parallel intrinsically connected tree from the flat, ID based internal
-    /// representations of goals in profiles.
+    /// representations of [Goal](Goal) in [Profile](super::Profile).
     ///
     /// To facilitate this use case each invocation of the visitor can create an associated
     /// chunk of data of type V that is created through the visitor function invocation and
@@ -179,6 +179,10 @@ pub mod goal_traversal {
         }
     }
 
+    /// Create a (PopulatedGoal)[PopulatedGoal] value by traversing the child
+    /// tree of a goal. Returns an options containing the populated goal value
+    /// and the set of child ids in the child tree. Returns None if no goals
+    /// were found with the provided `goal_id`.
     pub fn populate_goal_tree(
         goals: &HashMap<GoalId, Goal>,
         goal_id: GoalId,
@@ -227,6 +231,111 @@ pub mod goal_traversal {
             None
         }
     }
+
+    /// Visit a goal child tree and collect the ids of child/parent goal tuples that satisfy
+    /// the given predicate. The predicate is passed the parent's id, whether or not the parent
+    /// satisfied the predicate, the child's id and the goal data.
+    pub fn visit_tree_with_predicate_and_parent<P>(
+        goals: &HashMap<GoalId, Goal>,
+        goal_id: GoalId,
+        predicate: &mut P,
+        does_root_satisfy_predicate: bool,
+    ) -> Option<HashSet<GoalId>>
+    where
+        P: FnMut(GoalId, bool, GoalId, &Goal) -> bool,
+    {
+        let mut passing_child_ids = HashSet::new();
+
+        if visit_goal_child_tree(
+            goals,
+            goal_id,
+            &mut |parent_goal_id, parent_satisfied_predicate, child_id, child_goal| -> bool {
+                if predicate(
+                    parent_goal_id,
+                    *parent_satisfied_predicate,
+                    child_id,
+                    child_goal,
+                ) {
+                    passing_child_ids.insert(child_id);
+                    true
+                } else {
+                    false
+                }
+            },
+            does_root_satisfy_predicate,
+        )
+        .is_some()
+        {
+            Some(passing_child_ids)
+        } else {
+            None
+        }
+    }
+
+    /// Visit a goal child tree and collect the ids of child goals that satisfy
+    /// the given predicate. The predicate is passed the child's id and goal data.
+    pub fn visit_tree_with_predicate<P>(
+        goals: &HashMap<GoalId, Goal>,
+        goal_id: GoalId,
+        predicate: &mut P,
+    ) -> Option<HashSet<GoalId>>
+    where
+        P: FnMut(GoalId, &Goal) -> bool,
+    {
+        let mut passing_child_ids = HashSet::new();
+
+        if visit_goal_child_tree(
+            goals,
+            goal_id,
+            &mut |_, _, child_id, child_goal| {
+                if predicate(child_id, child_goal) {
+                    passing_child_ids.insert(child_id);
+                }
+            },
+            (),
+        )
+        .is_some()
+        {
+            Some(passing_child_ids)
+        } else {
+            None
+        }
+    }
+
+    /// Partition a goal child tree into a set of child goal ids that satisfies the
+    /// predicate and another set of ids where they do not. The predicate is passed
+    /// the child goal's id and goal data. The return tuple is in the order
+    /// `(satisfies, does not satisfy)`.
+    pub fn partition_tree_with_predicate<P>(
+        goals: &HashMap<GoalId, Goal>,
+        goal_id: GoalId,
+        predicate: &mut P,
+    ) -> Option<(HashSet<GoalId>, HashSet<GoalId>)>
+    where
+        P: FnMut(GoalId, &Goal) -> bool,
+    {
+        let mut passing_child_ids = HashSet::new();
+        let mut failing_child_ids = HashSet::new();
+
+        if visit_goal_child_tree(
+            goals,
+            goal_id,
+            &mut |_, _, child_id, child_goal| {
+                if predicate(child_id, child_goal) {
+                    passing_child_ids.insert(child_id);
+                } else {
+                    failing_child_ids.insert(child_id);
+                }
+            },
+            (),
+        )
+        .is_some()
+        {
+            Some((passing_child_ids, failing_child_ids))
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -248,18 +357,25 @@ impl Profile {
         self.time_of_day_config = config;
     }
 
-    pub fn focus_goal(&mut self, id: GoalId) -> Option<GoalEvent> {
-        self.goals.get(&id).map(|_| {
+    pub fn focus_single_goal(&mut self, id: GoalId) -> bool {
+        if self.goals.contains_key(&id) {
             self.focused_goals.insert(id);
-
-            GoalEvent::Focus {
-                focus_root_id: id,
-                focused_children: vec![],
-            }
-        })
+            true
+        } else {
+            false
+        }
     }
 
-    pub fn add_goal(&mut self, goal: Goal) -> GoalEvent {
+    pub fn unfocus_single_goal(&mut self, id: GoalId) -> bool {
+        if self.focused_goals.contains(&id) {
+            self.focused_goals.remove(&id);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn add_goal(&mut self, goal: Goal) -> GoalId {
         let goal_id = GoalId(self.goal_id_count);
         self.goal_id_count += 1;
 
@@ -267,7 +383,57 @@ impl Profile {
             panic!("not to have a goal id conflict due to monotonic counter");
         }
 
-        GoalEvent::Add { goal_id }
+        goal_id
+    }
+
+    pub fn focus_goal(&mut self, goal_id: GoalId) -> Option<HashSet<GoalId>> {
+        visit_tree_with_predicate(&self.goals, goal_id, &mut |child_id, _| -> bool {
+            self.focused_goals.contains(&child_id)
+        })
+        .map(|mut child_ids_need_focusing| {
+            self.focused_goals.insert(goal_id);
+            for child_id in child_ids_need_focusing.iter() {
+                self.focused_goals.insert(*child_id);
+            }
+
+            child_ids_need_focusing.insert(goal_id);
+            child_ids_need_focusing
+        })
+    }
+
+    pub fn unfocus_goal(&mut self, goal_id: GoalId) -> Option<HashSet<GoalId>> {
+        if self.focused_goals.contains(&goal_id) {
+            visit_tree_with_predicate(&self.goals, goal_id, &mut |child_id, _| -> bool {
+                !self.focused_goals.contains(&child_id)
+            })
+            .map(|mut child_ids_need_unfocusing| {
+                self.focused_goals.remove(&goal_id);
+                for child_id in child_ids_need_unfocusing.iter() {
+                    self.focused_goals.remove(child_id);
+                }
+
+                child_ids_need_unfocusing.insert(goal_id);
+                child_ids_need_unfocusing
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn rescope_goal(&mut self, goal_id: GoalId, new_effort_to_complete: u32) -> Option<u32> {
+        if let Some(goal) = self.goals.get_mut(&goal_id) {
+            let original_effort_to_complete = goal.effort_to_complete();
+            goal.rescope(new_effort_to_complete);
+            Some(original_effort_to_complete)
+        } else {
+            None
+        }
+    }
+
+    pub fn rename_goal<S: Into<String>>(&mut self, goal_id: GoalId, new_name: S) -> Option<String> {
+        self.goals
+            .get_mut(&goal_id)
+            .map(|goal| goal.rename(new_name))
     }
 
     pub fn refine_goal(
@@ -275,7 +441,7 @@ impl Profile {
         child_goal: Goal,
         parent_goal_id: GoalId,
         parent_effort_removed: u32,
-    ) -> Option<GoalEvent> {
+    ) -> Option<GoalId> {
         let Some(parent_goal) = self.goals.get_mut(&parent_goal_id) else {
                 return None;
             };
@@ -289,11 +455,7 @@ impl Profile {
             panic!("not to have a goal id conflict due to monotonic counter");
         }
 
-        Some(GoalEvent::Refine {
-            parent_goal_id,
-            parent_effort_removed,
-            new_child_goal: child_goal_id,
-        })
+        Some(child_goal_id)
     }
 
     fn remove_goals_from_event_relationships(&mut self, goal_ids: &HashSet<GoalId>) {
@@ -307,20 +469,21 @@ impl Profile {
         }
     }
 
-    pub fn remove_goal(&mut self, goal_id: GoalId) -> Option<GoalEvent> {
-        if let Some((populated_goal, ids_needing_removal)) =
+    pub fn remove_goal(&mut self, goal_id: GoalId) -> Option<PopulatedGoal> {
+        if let Some((populated_goal, child_ids_needing_removal)) =
             populate_goal_tree(&self.goals, goal_id)
         {
-            for goal_id in ids_needing_removal.iter() {
+            self.goals.remove(&goal_id);
+            self.focused_goals.remove(&goal_id);
+
+            for goal_id in child_ids_needing_removal.iter() {
                 self.goals.remove(goal_id);
                 self.focused_goals.remove(goal_id);
             }
 
-            self.remove_goals_from_event_relationships(&ids_needing_removal);
+            self.remove_goals_from_event_relationships(&child_ids_needing_removal);
 
-            Some(GoalEvent::Delete {
-                deleted_goal_data: populated_goal,
-            })
+            Some(populated_goal)
         } else {
             None
         }
@@ -387,11 +550,7 @@ mod tests {
 
         use chrono::{TimeZone, Utc};
 
-        use crate::{
-            goal::{Goal, GoalEvent},
-            profile::Profile,
-            query::GoalQueryEngine,
-        };
+        use crate::{goal::Goal, profile::Profile, query::GoalQueryEngine};
 
         #[test]
         fn goal_finish_status() {
@@ -400,9 +559,7 @@ mod tests {
             let datetime = Utc.with_ymd_and_hms(2022, 1, 1, 1, 0, 0).unwrap();
             let mut profile = profile.with_datetime(datetime);
 
-            let GoalEvent::Add { goal_id } = profile.0.add_goal(Goal::new("test goal", 2)) else {
-                    panic!("unexpected goal event contents");
-                };
+            let goal_id = profile.0.add_goal(Goal::new("test goal", 2));
 
             assert!(!profile.get_goal(goal_id).unwrap().finished());
             assert_eq!(profile.unfinished_goals(), HashSet::from([goal_id]));
@@ -441,11 +598,6 @@ mod tests {
             let datetime = Utc.with_ymd_and_hms(2022, 1, 1, 1, 0, 0).unwrap();
 
             let profile = profile.with_datetime(datetime);
-            let GoalEvent::Add { goal_id } = profile.0.add_goal(Goal::new("test goal", 10)) else {
-                    panic!("unexpected goal event contents");
-                };
-
-            profile.0.refine_goal(Goal::new("child", 2), goal_id, 0);
         }
     }
 }

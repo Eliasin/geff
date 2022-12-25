@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::event::EventId;
+
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum GoalRelationship {
     Requires(GoalId),
@@ -18,21 +20,23 @@ pub enum GoalEvent {
     },
     Focus {
         focus_root_id: GoalId,
-        focused_children: Vec<GoalId>,
+        focused_children: HashSet<GoalId>,
     },
     Unfocus {
         unfocus_root_id: GoalId,
-        unfocused_children: Vec<GoalId>,
+        unfocused_children: HashSet<GoalId>,
     },
     FocusSingle(GoalId),
     UnfocusSingle(GoalId),
     RescopeByFinish {
         goal_id: GoalId,
-        effort_done: u32,
+        finished_by: EventId,
+        effort_done_at_time_of_finish: u32,
     },
     Rescope {
         goal_id: GoalId,
-        new_effort: u32,
+        new_effort_to_complete: u32,
+        original_effort_to_complete: u32,
     },
     Add {
         goal_id: GoalId,
@@ -40,14 +44,13 @@ pub enum GoalEvent {
     Refine {
         parent_goal_id: GoalId,
         parent_effort_removed: u32,
-        new_child_goal: GoalId,
+        new_child_goal_id: GoalId,
     },
     Delete {
-        deleted_goal_data: PopulatedGoal,
+        deleted_goal_tree: PopulatedGoal,
     },
     Rename {
         goal_id: GoalId,
-        new_name: String,
         old_name: String,
     },
 }
@@ -87,8 +90,10 @@ impl Goal {
         &self.name
     }
 
-    pub fn rename<S: Into<String>>(&mut self, new_name: S) {
-        self.name = new_name.into()
+    pub fn rename<S: Into<String>>(&mut self, new_name: S) -> String {
+        let old_name = self.name.clone();
+        self.name = new_name.into();
+        old_name
     }
 
     pub fn add_effort(&mut self, effort: u32) {

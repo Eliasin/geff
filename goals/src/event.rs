@@ -43,7 +43,7 @@ pub struct FloatingEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct EventId(pub(crate) u32);
+pub struct EventId(pub u32);
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Event {

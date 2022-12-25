@@ -12,12 +12,20 @@ pub enum GoalRelationship {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum GoalEvent {
-    Effort {
+    AddEffort {
         goal_id: GoalId,
-        effort_done: u32,
+        effort: u32,
     },
-    Activated(GoalId),
-    Deactivated(GoalId),
+    Focus {
+        focus_root_id: GoalId,
+        focused_children: Vec<GoalId>,
+    },
+    Unfocus {
+        unfocus_root_id: GoalId,
+        unfocused_children: Vec<GoalId>,
+    },
+    FocusSingle(GoalId),
+    UnfocusSingle(GoalId),
     RescopeByFinish {
         goal_id: GoalId,
         effort_done: u32,
@@ -45,7 +53,7 @@ pub enum GoalEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct GoalId(pub(crate) u32);
+pub struct GoalId(pub u32);
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Goal {

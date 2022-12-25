@@ -7,7 +7,10 @@ use thiserror::Error;
 use crate::{
     event::{EventId, TimeOfDay},
     goal::GoalId,
+    profile::ProfileAndDateTime,
 };
+
+use self::event_query_helpers::{event_ended, event_not_started, event_occuring};
 
 #[derive(Deserialize, Serialize, Clone, Copy)]
 pub struct TimeOfDayConfiguration {
@@ -239,4 +242,112 @@ pub trait GoalQueryEngine {
     fn started_goals(&self) -> HashSet<GoalId>;
 
     fn goal_ids(&self) -> HashSet<GoalId>;
+}
+
+impl GoalQueryEngine for ProfileAndDateTime<'_> {
+    fn unfinished_goals(&self) -> HashSet<GoalId> {
+        self.0
+            .goals
+            .iter()
+            .filter(|(_, goal)| goal.unfinished())
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
+    fn finished_goals(&self) -> HashSet<GoalId> {
+        self.0
+            .goals
+            .iter()
+            .filter(|(_, goal)| goal.finished())
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
+    fn ended_goals(&self) -> HashSet<GoalId> {
+        self.0
+            .goals
+            .iter()
+            .filter(|(&id, _)| {
+                match goal_query_helpers::goal_end_event(id, self.0.events.values()) {
+                    Some(goal_end_event) => {
+                        event_ended(&self.0.time_of_day_config, self.1, &goal_end_event)
+                    }
+                    None => false,
+                }
+            })
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
+    fn started_goals(&self) -> HashSet<GoalId> {
+        self.0
+            .goals
+            .iter()
+            .filter(|(&id, _)| {
+                match goal_query_helpers::goal_start_event(id, self.0.events.values()) {
+                    Some(goal_end_event) => {
+                        !event_not_started(&self.0.time_of_day_config, self.1, &goal_end_event)
+                    }
+                    None => false,
+                }
+            })
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
+    fn goal_ids(&self) -> HashSet<GoalId> {
+        self.0.goals.iter().map(|(&id, _)| id).collect()
+    }
+
+    fn active_goals(&self) -> HashSet<GoalId> {
+        let started_goals = self.started_goals();
+        let unfinished_goals = self.unfinished_goals();
+        let ended_goals = self.ended_goals();
+
+        started_goals
+            .into_iter()
+            .filter(|g| unfinished_goals.contains(g) && ended_goals.contains(g))
+            .collect()
+    }
+
+    fn inactive_goals(&self) -> HashSet<GoalId> {
+        let active_goals = self.active_goals();
+        self.goal_ids()
+            .into_iter()
+            .filter(|id| !active_goals.contains(id))
+            .collect()
+    }
+}
+
+impl<'a> EventQueryEngine for ProfileAndDateTime<'a> {
+    fn currently_occuring_events(&self) -> HashSet<EventId> {
+        self.0
+            .events
+            .iter()
+            .filter(|(_, event)| event_occuring(&self.0.time_of_day_config, self.1, event))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn past_events(&self) -> HashSet<EventId> {
+        self.0
+            .events
+            .iter()
+            .filter(|(_, event)| event_ended(&self.0.time_of_day_config, self.1, event))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn future_events(&self) -> HashSet<EventId> {
+        self.0
+            .events
+            .iter()
+            .filter(|(_, event)| event_not_started(&self.0.time_of_day_config, self.1, event))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn event_ids(&self) -> HashSet<EventId> {
+        self.0.events.iter().map(|(&id, _)| id).collect()
+    }
 }

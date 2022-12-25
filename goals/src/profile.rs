@@ -598,6 +598,57 @@ mod tests {
             let datetime = Utc.with_ymd_and_hms(2022, 1, 1, 1, 0, 0).unwrap();
 
             let profile = profile.with_datetime(datetime);
+
+            let root_goal = Goal::new("root", 0);
+            let first_child_goal = Goal::new("first_child", 0);
+            let second_child_goal = Goal::new("second_child", 0);
+            let first_grandchild_goal = Goal::new("first_grandchild_child", 0);
+            let second_grandchild_goal = Goal::new("second_grandchild_child", 0);
+
+            let root_id = profile.0.add_goal(root_goal.clone());
+            let first_child_id = profile
+                .0
+                .refine_goal(first_child_goal.clone(), root_id, 0)
+                .unwrap();
+            let second_child_id = profile
+                .0
+                .refine_goal(second_child_goal.clone(), root_id, 0)
+                .unwrap();
+            let first_grandchild_id = profile
+                .0
+                .refine_goal(first_grandchild_goal.clone(), second_child_id, 0)
+                .unwrap();
+            let second_grandchild_id = profile
+                .0
+                .refine_goal(second_grandchild_goal.clone(), second_child_id, 0)
+                .unwrap();
+
+            let all_goals = {
+                let mut all_goals = HashSet::new();
+
+                all_goals.insert(root_id);
+                all_goals.insert(first_child_id);
+                all_goals.insert(second_child_id);
+                all_goals.insert(first_grandchild_id);
+                all_goals.insert(second_grandchild_id);
+
+                all_goals
+            };
+
+            assert_eq!(all_goals, profile.goal_ids());
+
+            assert!(profile.0.remove_goal(second_child_id).is_some());
+
+            let goals_after_deletion = {
+                let mut goals_after_deletion = HashSet::new();
+
+                goals_after_deletion.insert(root_id);
+                goals_after_deletion.insert(first_child_id);
+
+                goals_after_deletion
+            };
+
+            assert_eq!(goals_after_deletion, profile.goal_ids());
         }
     }
 }

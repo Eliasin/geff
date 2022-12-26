@@ -601,10 +601,16 @@ fn loading_message<'a>() -> Element<'a, Message> {
 }
 
 fn commandline(commandline: &Option<String>) -> Element<'_, Message> {
-    match commandline {
-        Some(command) => text(format!(":{command}")),
-        None => text(""),
-    }
+    container(
+        match commandline {
+            Some(command) => text(format!(":{command}")),
+            None => text(""),
+        }
+        .vertical_alignment(alignment::Vertical::Bottom),
+    )
+    .padding([5, 10])
+    .height(Length::Fill)
+    .align_y(alignment::Vertical::Bottom)
     .into()
 }
 
@@ -626,7 +632,10 @@ fn goal<'a>(
         prefix.push('F');
     }
 
-    let goal_text = text(format!("{} {:?} {}", prefix, goal.id, goal.name));
+    let goal_text = text(format!(
+        "{} {} ({}/{})",
+        prefix, goal.name, goal.effort_to_date, goal.effort_to_complete
+    ));
 
     row![
         goal_text,
@@ -646,6 +655,7 @@ fn goals<'a>(
             .map(|g| goal(g, selected_goal_id, focused_goals))
             .collect(),
     )
+    .padding([30, 30])
     .into()
 }
 
@@ -654,7 +664,8 @@ fn main_ui(state: &AppState) -> Element<'_, Message> {
         .width(Length::Fill)
         .size(100)
         .style(Color::from([0.5, 0.5, 0.5]))
-        .horizontal_alignment(alignment::Horizontal::Center);
+        .horizontal_alignment(alignment::Horizontal::Center)
+        .vertical_alignment(alignment::Vertical::Top);
 
     let selected_cursor_id = if let Cursor::SelectedGoal(Some(selected_goal)) = &state.cursor {
         get_selected_goal_id(selected_goal, &state.populated_goals).ok()
@@ -662,26 +673,52 @@ fn main_ui(state: &AppState) -> Element<'_, Message> {
         None
     };
 
-    container(column![
-        title,
+    let middle_element: Element<'_, Message> = if state.populated_goals.is_empty() {
+        container(
+            text(
+                "help\n\
+             : to start command\n\
+             esc to cancel a command\n\
+             h/j/k/l to move left/down/up/right\n\n\
+             commands:\n\
+             c \"<name>\" <effort_to_complete>    to create a new goal\n\
+             d                                    to delete the selected goal\n\
+             f                                    to focus the selected goal",
+            )
+            .vertical_alignment(alignment::Vertical::Center),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x()
+        .center_y()
+        .into()
+    } else {
         goals(
             &state.populated_goals,
             selected_cursor_id,
-            state.persistent_state.profile.focused_goals()
-        ),
+            state.persistent_state.profile.focused_goals(),
+        )
+    };
+
+    container(column![
+        title,
+        middle_element,
         commandline(&state.commandline)
     ])
-    .padding(10)
+    .width(Length::Fill)
+    .height(Length::FillPortion(30))
     .into()
 }
 
 impl ErrorLog {
     pub fn view(&self) -> Element<'_, Message> {
-        container(scrollable(column(
-            self.0.iter().map(|message| text(message).into()).collect(),
-        )))
+        container(scrollable(
+            column(self.0.iter().map(|message| text(message).into()).collect()).width(Length::Fill),
+        ))
         .width(Length::Fill)
-        .height(Length::Fill)
+        .align_y(alignment::Vertical::Bottom)
+        .padding([20, 20])
+        .height(Length::FillPortion(10))
         .into()
     }
 }

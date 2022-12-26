@@ -428,7 +428,7 @@ pub mod goal_traversal {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Profile {
     goal_id_count: u32,
     event_id_count: u32,

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::goal::GoalRelationship;
 
 #[serde_with::serde_as]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockEvent {
     pub(crate) start: DateTime<Utc>,
     #[serde_as(as = "serde_with::DurationSeconds<i64>")]
@@ -12,13 +12,13 @@ pub struct BlockEvent {
     pub(crate) goal_relationships: Vec<GoalRelationship>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InstantEvent {
     pub(crate) time: DateTime<Utc>,
     pub(crate) goal_relationships: Vec<GoalRelationship>,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub enum TimeOfDay {
     Morning,
     Midday,
@@ -35,7 +35,7 @@ impl TimeOfDay {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FloatingEvent {
     pub(crate) date: NaiveDate,
     pub(crate) time_of_day: TimeOfDay,
@@ -45,7 +45,7 @@ pub struct FloatingEvent {
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct EventId(pub u32);
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Event {
     BlockEvent(BlockEvent),
     InstantEvent(InstantEvent),

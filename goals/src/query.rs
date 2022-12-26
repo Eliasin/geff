@@ -12,7 +12,7 @@ use crate::{
 
 use self::event_query_helpers::{event_ended, event_not_started, event_occuring};
 
-#[derive(Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 pub struct TimeOfDayConfiguration {
     midday_start: NaiveTime,
     evening_start: NaiveTime,

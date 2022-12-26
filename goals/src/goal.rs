@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::EventId;
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum GoalRelationship {
     Requires(GoalId),
     Ends(GoalId),
@@ -58,7 +58,7 @@ pub enum GoalEvent {
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct GoalId(pub u32);
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Goal {
     name: String,
     effort_to_date: u32,

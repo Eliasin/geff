@@ -12,7 +12,7 @@ pub enum GoalRelationship {
     Starts(GoalId),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum GoalEvent {
     AddEffort {
         goal_id: GoalId,
@@ -66,7 +66,7 @@ pub struct Goal {
     children: HashSet<GoalId>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PopulatedGoal {
     pub id: GoalId,
     pub parent_goal_id: Option<GoalId>,

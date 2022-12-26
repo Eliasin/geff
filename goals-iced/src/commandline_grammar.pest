@@ -1,0 +1,12 @@
+command = _{ SOI ~ create | delete | focus | unfocus | focus_single | unfocus_single | refine ~ EOI }
+
+name = { ASCII_ALPHANUMERIC+ }
+number = { ASCII_DIGIT+ }
+
+create = { "c" ~ " "+ ~ name ~ " "+ ~ number }
+delete = { "d" }
+focus = { "f" }
+unfocus = { "u" }
+focus_single = { "fs" }
+unfocus_single = { "us" }
+refine = { "r" ~ " "+ ~ name ~ " "+ ~ number ~ " "+ ~ number }

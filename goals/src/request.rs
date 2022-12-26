@@ -5,7 +5,7 @@ use crate::{
     profile::ProfileAndDateTime,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum GoalRequest {
     AddEffort {
         goal_id: GoalId,
@@ -43,7 +43,6 @@ pub trait GoalRequestHandler {
     fn handle_request(&mut self, request: GoalRequest) -> Vec<GoalEvent>;
 }
 
-#[allow(unused_variables)]
 impl GoalRequestHandler for ProfileAndDateTime<'_> {
     fn handle_request(&mut self, request: GoalRequest) -> Vec<GoalEvent> {
         match request {
@@ -136,7 +135,7 @@ impl GoalRequestHandler for ProfileAndDateTime<'_> {
                 .map_or(vec![], |old_name| {
                     vec![GoalEvent::Rename { goal_id, old_name }]
                 }),
-            GoalRequest::ProcessDateTime { datetime } => todo!(),
+            GoalRequest::ProcessDateTime { datetime: _ } => todo!(),
         }
     }
 }

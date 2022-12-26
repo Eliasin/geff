@@ -296,7 +296,7 @@ impl GoalQueryEngine for ProfileAndDateTime<'_> {
     }
 
     fn goal_ids(&self) -> HashSet<GoalId> {
-        self.0.goals.iter().map(|(&id, _)| id).collect()
+        self.0.goal_ids()
     }
 
     fn active_goals(&self) -> HashSet<GoalId> {

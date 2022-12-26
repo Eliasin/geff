@@ -21,16 +21,26 @@ pub mod goal_traversal {
     pub type GoalChildIndexPath = Vec<usize>;
 
     pub fn traverse_populated_goal_children<'a>(
+        root_goal: &'a PopulatedGoal,
+        goal_child_index_path: &GoalChildIndexPath,
+    ) -> Option<&'a PopulatedGoal> {
+        let mut current = root_goal;
+
+        for goal_child_index in goal_child_index_path {
+            current = current.children.get(*goal_child_index)?;
+        }
+
+        Some(current)
+    }
+
+    pub fn traverse_populated_goal_children_mut<'a>(
         root_goal: &'a mut PopulatedGoal,
         goal_child_index_path: &GoalChildIndexPath,
     ) -> Option<&'a mut PopulatedGoal> {
         let mut current = root_goal;
 
         for goal_child_index in goal_child_index_path {
-            match current.children.get_mut(*goal_child_index) {
-                Some(child) => current = child,
-                None => return None,
-            }
+            current = current.children.get_mut(*goal_child_index)?;
         }
 
         Some(current)
@@ -219,7 +229,7 @@ pub mod goal_traversal {
                         Some(parent_goal_id),
                     );
 
-                    let current_goal_populated_template = traverse_populated_goal_children(
+                    let current_goal_populated_template = traverse_populated_goal_children_mut(
                         &mut root_populated_goal,
                         parent_index_path,
                     )
@@ -287,7 +297,7 @@ pub mod goal_traversal {
                         Some(parent_goal_id),
                     );
 
-                    let current_goal_populated_template = traverse_populated_goal_children(
+                    let current_goal_populated_template = traverse_populated_goal_children_mut(
                         &mut root_populated_goal,
                         parent_index_path,
                     )
@@ -428,7 +438,7 @@ pub mod goal_traversal {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Profile {
     goal_id_count: u32,
     event_id_count: u32,
@@ -620,6 +630,21 @@ impl Profile {
 
     pub fn get_goal_mut(&mut self, id: GoalId) -> Option<&mut Goal> {
         self.goals.get_mut(&id)
+    }
+
+    pub fn focused_goals(&self) -> &HashSet<GoalId> {
+        &self.focused_goals
+    }
+
+    pub fn unfocused_goals(&self) -> HashSet<GoalId> {
+        self.goal_ids()
+            .difference(&self.focused_goals)
+            .copied()
+            .collect()
+    }
+
+    pub fn goal_ids(&self) -> HashSet<GoalId> {
+        self.goals.iter().map(|(&id, _)| id).collect()
     }
 }
 

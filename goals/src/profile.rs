@@ -9,7 +9,7 @@ use crate::{
     query::TimeOfDayConfiguration,
 };
 
-use self::goal_traversal::{populate_goal_tree, visit_tree_with_predicate};
+use self::goal_traversal::{get_root_goals, populate_goal_tree, visit_tree_with_predicate};
 
 pub struct ProfileAndDateTime<'a>(pub &'a mut Profile, pub DateTime<Utc>);
 
@@ -164,6 +164,18 @@ pub mod goal_traversal {
         }
     }
 
+    pub fn get_root_goals(goals: &HashMap<GoalId, Goal>) -> impl Iterator<Item = GoalId> + '_ {
+        let child_goals: HashSet<GoalId> = goals
+            .values()
+            .flat_map(|goal| goal.children())
+            .copied()
+            .collect();
+
+        goals
+            .keys()
+            .filter_map(move |id| (!child_goals.contains(id)).then_some(*id))
+    }
+
     pub fn populated_goal_traversal_template(
         goal_id: GoalId,
         goal: &Goal,
@@ -180,7 +192,7 @@ pub mod goal_traversal {
     }
 
     /// Create a (PopulatedGoal)[PopulatedGoal] value by traversing the child
-    /// tree of a goal. Returns an options containing the populated goal value
+    /// tree of a goal. Returns an option containing the populated goal value
     /// and the set of child ids in the child tree. Returns None if no goals
     /// were found with the provided `goal_id`.
     pub fn populate_goal_tree(
@@ -227,6 +239,84 @@ pub mod goal_traversal {
             .expect("goal to be valid since it is checked before calling visit");
 
             Some((root_populated_goal, ids_visited))
+        } else {
+            None
+        }
+    }
+
+    pub struct PartitionedPopulatedTree {
+        pub populated_tree: PopulatedGoal,
+        pub satisfies_predicate: HashSet<(GoalChildIndexPath, GoalId)>,
+        pub does_not_satisfy_predicate: HashSet<(GoalChildIndexPath, GoalId)>,
+    }
+
+    /// Create a (PopulatedGoal)[PopulatedGoal] value by traversing the child
+    /// tree of a goal while also partitioning the tree using a predicate function.
+    /// Returns an option containing the populated goal value, the set of child id and
+    /// goal child index path pairs in the child tree that satisfies the predicate and
+    /// the set of pairs in the child tree that do not. Returns None if no goals were
+    /// found with the provided `goal_id`.
+    pub fn populate_partitioned_goal_tree<P>(
+        goals: &HashMap<GoalId, Goal>,
+        goal_id: GoalId,
+        predicate: &P,
+    ) -> Option<PartitionedPopulatedTree>
+    where
+        P: Fn(GoalId, &Goal) -> bool,
+    {
+        if let Some(goal) = goals.get(&goal_id) {
+            let parent_goal_id = get_goal_parent_id(goals, goal_id);
+
+            let mut passing_children = HashSet::new();
+            let mut failing_children = HashSet::new();
+
+            let mut root_populated_goal =
+                populated_goal_traversal_template(goal_id, goal, parent_goal_id);
+
+            visit_goal_child_tree::<GoalChildIndexPath, _>(
+                goals,
+                goal_id,
+                &mut |parent_goal_id: GoalId,
+                      parent_index_path: &GoalChildIndexPath,
+                      child_id: GoalId,
+                      child_goal: &Goal|
+                 -> GoalChildIndexPath {
+                    let child_populated_goal_template = populated_goal_traversal_template(
+                        child_id,
+                        child_goal,
+                        Some(parent_goal_id),
+                    );
+
+                    let current_goal_populated_template = traverse_populated_goal_children(
+                        &mut root_populated_goal,
+                        parent_index_path,
+                    )
+                    .expect("goal child index path to be valid");
+
+                    let mut child_index_path = parent_index_path.clone();
+                    if predicate(child_id, child_goal) {
+                        passing_children.insert((child_index_path.clone(), child_id));
+                    } else {
+                        failing_children.insert((child_index_path.clone(), child_id));
+                    }
+
+                    child_index_path.push(current_goal_populated_template.children.len());
+
+                    current_goal_populated_template
+                        .children
+                        .push(child_populated_goal_template);
+
+                    child_index_path
+                },
+                vec![],
+            )
+            .expect("goal to be valid since it is checked before calling visit");
+
+            Some(PartitionedPopulatedTree {
+                populated_tree: root_populated_goal,
+                satisfies_predicate: passing_children,
+                does_not_satisfy_predicate: failing_children,
+            })
         } else {
             None
         }
@@ -502,6 +592,14 @@ impl Profile {
 
     pub fn remove_event(&mut self, event_id: EventId) -> Option<Event> {
         self.events.remove(&event_id)
+    }
+
+    pub fn populate_goals(&self) -> Vec<PopulatedGoal> {
+        let root_goal_ids = get_root_goals(&self.goals);
+
+        root_goal_ids
+            .map(|root_goal_id| populate_goal_tree(&self.goals, root_goal_id).unwrap().0)
+            .collect()
     }
 
     pub fn with_datetime(&mut self, datetime: DateTime<Utc>) -> ProfileAndDateTime {

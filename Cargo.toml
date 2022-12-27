@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-        "goals",
-        "goals-iced"
+        "geff-core",
+        "geff-iced"
 ]

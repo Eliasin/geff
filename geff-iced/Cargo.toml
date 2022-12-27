@@ -1,5 +1,5 @@
 [package]
-name = "goals-iced"
+name = "geff-iced"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.6", features = ["tokio"] }
-goals = { path = "../goals" }
+geff-core = { path = "../geff-core" }
 rmp-serde = "1.1.1"
 serde = { version = "1.0.151", features = ["derive"] }
 thiserror = "1.0.38"

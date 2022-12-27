@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::{env::VarError, path::PathBuf};
 
-use goals::goal::{GoalId, PopulatedGoal};
-use goals::profile::goal_traversal::{traverse_populated_goal_children, GoalChildIndexPath};
-use goals::request::GoalRequestHandler;
-use goals::{goal::GoalEvent, profile::Profile, request::GoalRequest};
-use goals::{DateTime, Utc};
+use geff_core::goal::{GoalId, PopulatedGoal};
+use geff_core::profile::goal_traversal::{traverse_populated_goal_children, GoalChildIndexPath};
+use geff_core::request::GoalRequestHandler;
+use geff_core::{goal::GoalEvent, profile::Profile, request::GoalRequest};
+use geff_core::{DateTime, Utc};
 use iced::subscription::events_with;
 use iced::widget::{column, container, row, scrollable, text};
 use iced::{
@@ -367,7 +367,7 @@ impl Application for App {
     }
 
     fn title(&self) -> String {
-        "Goals".to_string()
+        "Geff".to_string()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -514,24 +514,26 @@ impl PersistentState {
     fn default_data_path() -> Result<PathBuf, LoadError> {
         let appdata = PathBuf::from(std::env::var("APPDATA")?);
 
-        Ok(app_data.join("Roaming/GoalsIced/data"))
+        Ok(app_data.join("Roaming/GeffIced/data"))
     }
 
     #[cfg(target_os = "linux")]
     fn default_data_path() -> Result<PathBuf, LoadError> {
         let home = PathBuf::from(std::env::var("HOME")?);
-        Ok(home.join(".goals-iced"))
+        Ok(home.join(".geff_core-iced"))
     }
 
     #[cfg(target_os = "macos")]
     fn default_data_path() -> Result<PathBuf, LoadError> {
-        Ok(PathBuf::from("~Library/Application Suppoer/GoalsIced/Data"))
+        Ok(PathBuf::from(
+            "~Library/Application Suppoer/Geff_CoreIced/Data",
+        ))
     }
 
     pub async fn load() -> Result<Self, LoadError> {
         use tokio::fs;
 
-        let profile_data_path = std::env::var("GOALS_ICED_DATA_PATH")
+        let profile_data_path = std::env::var("GEFF_CORE_ICED_DATA_PATH")
             .map(PathBuf::from)
             .unwrap_or(Self::default_data_path()?);
 
@@ -660,7 +662,7 @@ fn goals<'a>(
 }
 
 fn main_ui(state: &AppState) -> Element<'_, Message> {
-    let title = text("Goals")
+    let title = text("Geff")
         .width(Length::Fill)
         .size(100)
         .style(Color::from([0.5, 0.5, 0.5]))

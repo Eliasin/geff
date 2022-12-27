@@ -889,6 +889,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "geff-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_with",
+ "thiserror",
+]
+
+[[package]]
+name = "geff-iced"
+version = "0.1.0"
+dependencies = [
+ "geff-core",
+ "iced",
+ "pest",
+ "pest_derive",
+ "rmp-serde",
+ "serde",
+ "thiserror",
+ "tokio",
+ "wasm-timer",
+ "web-sys",
+ "whoami",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -974,33 +1001,6 @@ dependencies = [
  "ab_glyph",
  "approx",
  "xi-unicode",
-]
-
-[[package]]
-name = "goals"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_with",
- "thiserror",
-]
-
-[[package]]
-name = "goals-iced"
-version = "0.1.0"
-dependencies = [
- "goals",
- "iced",
- "pest",
- "pest_derive",
- "rmp-serde",
- "serde",
- "thiserror",
- "tokio",
- "wasm-timer",
- "web-sys",
- "whoami",
 ]
 
 [[package]]

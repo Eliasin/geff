@@ -73,6 +73,8 @@ pub struct PopulatedGoal {
     pub name: String,
     pub effort_to_date: u32,
     pub effort_to_complete: u32,
+    pub max_child_layer_width: usize,
+    pub max_child_depth: usize,
     pub children: Vec<PopulatedGoal>,
 }
 
@@ -114,7 +116,7 @@ impl Goal {
     }
 
     pub fn refine(&mut self, child: GoalId, effort_removed: u32) {
-        self.effort_to_complete -= effort_removed;
+        self.effort_to_complete = self.effort_to_complete.saturating_sub(effort_removed);
         self.children.insert(child);
     }
 

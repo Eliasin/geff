@@ -3,5 +3,6 @@ resolver = "2"
 members = [
         "geff-core",
         "geff-util",
-        "geff-iced"
+        "geff-iced",
+        "geff-tui",
 ]

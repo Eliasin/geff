@@ -1,5 +1,6 @@
 use std::env::VarError;
 use std::fmt::Debug;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use geff_core::goal::{GoalEvent, GoalId, PopulatedGoal};
@@ -31,9 +32,9 @@ pub struct PersistentState<C>
 where
     C: std::fmt::Debug + Serialize + Clone + Default,
 {
-    profile: Profile,
-    goal_event_history: Vec<GoalEvent>,
-    config: C,
+    pub profile: Profile,
+    pub goal_event_history: Vec<GoalEvent>,
+    pub config: C,
 }
 
 impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> From<PersistentState<C>>
@@ -47,31 +48,35 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> From<P
 #[cfg(not(target_arch = "wasm32"))]
 impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> PersistentState<C> {
     #[cfg(target_os = "windows")]
-    fn default_data_path() -> Result<PathBuf, LoadError> {
+    fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
         let appdata = PathBuf::from(std::env::var("APPDATA")?);
 
-        Ok(app_data.join("Roaming/GeffIced/data"))
+        Ok(app_data
+            .join("Roaming")
+            .join(app_name.as_ref())
+            .join("data"))
     }
 
     #[cfg(target_os = "linux")]
-    fn default_data_path() -> Result<PathBuf, LoadError> {
+    fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
         let home = PathBuf::from(std::env::var("HOME")?);
-        Ok(home.join(".geff_core-iced"))
+        Ok(home.join(format!(".{}", app_name.as_ref())))
     }
 
     #[cfg(target_os = "macos")]
-    fn default_data_path() -> Result<PathBuf, LoadError> {
-        Ok(PathBuf::from(
-            "~Library/Application Suppoer/Geff_CoreIced/Data",
-        ))
+    fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
+        Ok(PathBuf::from(format!(
+            "~Library/Application Support/{}/Data",
+            app_name.as_ref()
+        )))
     }
 
-    pub async fn load() -> Result<Self, LoadError> {
+    pub async fn load<S: AsRef<str>>(app_name: S) -> Result<Self, LoadError> {
         use tokio::fs;
 
         let profile_data_path = std::env::var("GEFF_CORE_ICED_DATA_PATH")
             .map(PathBuf::from)
-            .unwrap_or(Self::default_data_path()?);
+            .unwrap_or(Self::default_data_path(app_name)?);
 
         if !profile_data_path.exists() {
             fs::create_dir_all(
@@ -112,6 +117,50 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> Persis
             .map_err(|e| {
                 LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
             })?;
+
+        rmp_serde::decode::from_slice(&profile_bytes).map_err(|e| {
+            LoadError::MalformedProfileDataFile(profile_data_path.clone(), e.to_string())
+        })
+    }
+
+    pub fn blocking_load<S: AsRef<str>>(app_name: S) -> Result<Self, LoadError> {
+        use std::fs;
+
+        let profile_data_path = std::env::var("GEFF_CORE_ICED_DATA_PATH")
+            .map(PathBuf::from)
+            .unwrap_or(Self::default_data_path(app_name)?);
+
+        if !profile_data_path.exists() {
+            fs::create_dir_all(
+                profile_data_path
+                    .parent()
+                    .expect("profile data path to have parent"),
+            )
+            .map_err(|e| {
+                LoadError::ProfileDataCreation(profile_data_path.clone(), e.to_string())
+            })?;
+
+            let default_data = rmp_serde::encode::to_vec(&Self::default())
+                .expect("default data type to be serializable");
+
+            fs::File::create(&profile_data_path)
+                .map_err(|e| {
+                    LoadError::ProfileDataCreation(profile_data_path.clone(), e.to_string())
+                })?
+                .write_all(&default_data)
+                .map_err(|e| {
+                    LoadError::FailureToWriteDefaultData(profile_data_path.clone(), e.to_string())
+                })?;
+        }
+
+        let mut data_file = fs::File::open(profile_data_path.clone()).map_err(|e| {
+            LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
+        })?;
+
+        let mut profile_bytes = vec![];
+        data_file.read_to_end(&mut profile_bytes).map_err(|e| {
+            LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
+        })?;
 
         rmp_serde::decode::from_slice(&profile_bytes).map_err(|e| {
             LoadError::MalformedProfileDataFile(profile_data_path.clone(), e.to_string())

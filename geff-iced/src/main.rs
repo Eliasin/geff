@@ -171,7 +171,7 @@ impl Application for App {
             App::Loading(ErrorLog(vec![])),
             Command::perform(
                 async {
-                    geff_util::PersistentState::<()>::load()
+                    geff_util::PersistentState::<()>::load("geff-iced")
                         .await
                         .map(|loaded_state| {
                             let (profile, goal_event_history, _) = loaded_state.into();

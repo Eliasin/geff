@@ -20,6 +20,104 @@ pub mod goal_traversal {
 
     pub type GoalChildIndexPath = Vec<usize>;
 
+    pub fn visit_goal_path_from<V: FnMut(&mut PopulatedGoal, &GoalChildIndexPath)>(
+        root: &mut PopulatedGoal,
+        path: &GoalChildIndexPath,
+        v: &mut V,
+    ) {
+        let mut current_goal = root;
+        let mut current_path = Vec::with_capacity(path.len());
+
+        for index in path {
+            v(current_goal, &current_path);
+
+            current_goal = current_goal
+                .children
+                .get_mut(*index)
+                .expect("paths constructed");
+
+            current_path.push(*index);
+        }
+
+        v(current_goal, &current_path);
+    }
+
+    pub fn visit_populated_goal_children_mut<V, VF>(
+        goal: &mut PopulatedGoal,
+        v: &mut VF,
+        root_visitor_data: V,
+    ) where
+        VF: FnMut(&GoalChildIndexPath, &V, &GoalChildIndexPath, &mut PopulatedGoal) -> V,
+    {
+        let mut needs_visiting: Vec<(GoalChildIndexPath, V)> = vec![(vec![], root_visitor_data)];
+
+        while let Some((current_path, current_visitor_data)) = needs_visiting.pop() {
+            let current_goal = traverse_populated_goal_children_mut(goal, &current_path)
+                .expect("current path to always be valid");
+
+            let children = &mut current_goal.children;
+            for child_index in 0..children.len() {
+                let child_index_path = {
+                    let mut c = current_path.clone();
+                    c.push(child_index);
+                    c
+                };
+
+                let child_goal = current_goal
+                    .children
+                    .get_mut(child_index)
+                    .expect("child index to be valid");
+
+                let child_visitor_data = v(
+                    &current_path,
+                    &current_visitor_data,
+                    &child_index_path,
+                    child_goal,
+                );
+
+                needs_visiting.push((child_index_path, child_visitor_data));
+            }
+        }
+    }
+
+    pub fn visit_populated_goal_children<V, VF>(
+        goal: &PopulatedGoal,
+        v: &mut VF,
+        root_visitor_data: V,
+    ) where
+        VF: FnMut(&GoalChildIndexPath, &V, &GoalChildIndexPath, &PopulatedGoal) -> V,
+    {
+        let mut needs_visiting: Vec<(GoalChildIndexPath, V)> = vec![(vec![], root_visitor_data)];
+
+        while let Some((current_path, current_visitor_data)) = needs_visiting.pop() {
+            let current_goal = traverse_populated_goal_children(goal, &current_path)
+                .expect("current path to always be valid");
+
+            let children = &current_goal.children;
+            for child_index in 0..children.len() {
+                let child_index_path = {
+                    let mut c = current_path.clone();
+                    c.push(child_index);
+                    c
+                };
+
+                let child_goal = current_goal
+                    .children
+                    .get(child_index)
+                    .expect("child index to be valid");
+
+                let child_visitor_data = v(
+                    &current_path,
+                    &current_visitor_data,
+                    &child_index_path,
+                    child_goal,
+                );
+
+                needs_visiting.push((child_index_path, child_visitor_data));
+            }
+        }
+    }
+
     pub fn traverse_populated_goal_children<'a>(
         root_goal: &'a PopulatedGoal,
         goal_child_index_path: &GoalChildIndexPath,
@@ -198,6 +296,8 @@ pub mod goal_traversal {
             effort_to_date: goal.effort_to_date(),
             effort_to_complete: goal.effort_to_complete(),
             children: vec![],
+            max_child_depth: 0,
+            max_child_layer_width: 0,
         }
     }
 
@@ -214,6 +314,19 @@ pub mod goal_traversal {
 
             let mut root_populated_goal =
                 populated_goal_traversal_template(goal_id, goal, parent_goal_id);
+
+            let mut widths: Vec<usize> = vec![];
+            let mut add_node_to_width_vec = |node_depth: usize| {
+                let insert_index = node_depth
+                    .checked_sub(1)
+                    .expect("add_node_to_width_vec to only be called for non root nodes");
+                if let Some(width_counter) = widths.get_mut(insert_index) {
+                    *width_counter += 1;
+                } else {
+                    widths.extend((0..(insert_index - widths.len())).into_iter().map(|_| 0));
+                    widths.push(1);
+                }
+            };
 
             let ids_visited = visit_goal_child_tree::<GoalChildIndexPath, _>(
                 goals,
@@ -235,18 +348,70 @@ pub mod goal_traversal {
                     )
                     .expect("goal child index path to be valid");
 
-                    let mut child_index_path = parent_index_path.clone();
-                    child_index_path.push(current_goal_populated_template.children.len());
+                    let child_index_path = {
+                        let mut c = parent_index_path.clone();
+                        c.push(current_goal_populated_template.children.len());
+                        c
+                    };
+
+                    add_node_to_width_vec(child_index_path.len());
 
                     current_goal_populated_template
                         .children
                         .push(child_populated_goal_template);
+
+                    if child_goal.children().is_empty() {
+                        visit_goal_path_from(
+                            &mut root_populated_goal,
+                            parent_index_path,
+                            &mut |populated_goal, goal_path| {
+                                populated_goal.max_child_depth = usize::max(
+                                    populated_goal.max_child_depth,
+                                    child_index_path.len() - goal_path.len(),
+                                );
+                            },
+                        );
+                    }
 
                     child_index_path
                 },
                 vec![],
             )
             .expect("goal to be valid since it is checked before calling visit");
+
+            let propagate_max_width_back = &mut || {
+                let len = widths.len();
+                let mut max = None;
+                for width in widths[0..len].iter_mut().rev() {
+                    if let Some(max) = max.as_mut() {
+                        if *width > *max {
+                            *max = *width;
+                        } else {
+                            *width = *max;
+                        }
+                    } else {
+                        max = Some(*width);
+                    }
+                }
+                // We need to set the width for the root since the visit does not touch the root
+                root_populated_goal.max_child_layer_width = widths
+                    .first()
+                    .copied()
+                    .unwrap_or(root_populated_goal.children.len());
+            };
+
+            propagate_max_width_back();
+
+            visit_populated_goal_children_mut(
+                &mut root_populated_goal,
+                &mut |_, _, child_path, child_goal| {
+                    child_goal.max_child_layer_width = widths
+                        .get(child_path.len())
+                        .copied()
+                        .unwrap_or(child_goal.children.len());
+                },
+                (),
+            );
 
             Some((root_populated_goal, ids_visited))
         } else {

@@ -169,8 +169,11 @@ impl App {
                 self.commandline
                     .as_ref()
                     .map(|s| {
-                        App::command_slice_in_view(&format!(":{s}"), commandline_chunk.width)
-                            .to_string()
+                        App::command_slice_in_view(
+                            &format!(":{s}\u{2588}"),
+                            commandline_chunk.width.saturating_sub(2),
+                        )
+                        .to_string()
                     })
                     .unwrap_or("".to_string()),
             )
@@ -210,13 +213,11 @@ impl App {
         )
     }
 
-    fn draw_root_goal<B: Backend>(
+    fn render_root_goal(
         &self,
         root_goal: &PopulatedGoal,
         selected_goal_id: &Option<GoalId>,
-        frame: &mut Frame<B>,
-        row_chunk: Rect,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<String>> {
         let mut layers: Vec<Vec<GoalChildIndexPath>> = vec![];
         visit_populated_goal_children(
             root_goal,
@@ -266,34 +267,32 @@ impl App {
             }
         }
 
-        let final_text = final_rows.join("\n");
-        frame.render_widget(Paragraph::new(final_text), row_chunk);
-
-        Ok(())
+        Ok(final_rows)
     }
 
     fn draw_main<B: Backend>(&self, frame: &mut Frame<B>, main_chunk: Rect) -> anyhow::Result<()> {
-        let block = Block::default().title("Goals").borders(Borders::ALL);
-        frame.render_widget(block.clone(), main_chunk);
-
-        let row_chunks = Layout::default()
-            .direction(tui::layout::Direction::Vertical)
-            .constraints(
-                (0..self.populated_goals.len())
-                    .map(|_| Constraint::Min(1))
-                    .collect::<Vec<Constraint>>(),
-            )
-            .split(block.inner(main_chunk));
-
         let selected_goal_id = if let Cursor::SelectedGoal(Some(selected_goal)) = &self.cursor {
             get_selected_goal_id(selected_goal, &self.populated_goals).ok()
         } else {
             None
         };
 
-        for (root_goal, root_goal_chunk) in self.populated_goals.iter().zip(row_chunks) {
-            self.draw_root_goal(root_goal, &selected_goal_id, frame, root_goal_chunk)?;
-        }
+        let goal_text_rows: Vec<String> = self
+            .populated_goals
+            .iter()
+            .flat_map(|root_goal| {
+                self.render_root_goal(root_goal, &selected_goal_id)
+                    .unwrap_or(vec![format!(
+                        "ERROR RENDERING ROOT GOAL {}",
+                        root_goal.name
+                    )])
+            })
+            .collect();
+
+        let goal_text_widget = Paragraph::new(goal_text_rows.join("\n"))
+            .block(Block::default().title("Goals").borders(Borders::ALL));
+
+        frame.render_widget(goal_text_widget, main_chunk);
 
         Ok(())
     }
@@ -354,6 +353,8 @@ impl App {
                     let selected_goal_id =
                         get_selected_goal_id(selected_goal, &self.populated_goals)?;
 
+                    self.cursor
+                        .handle_action(geff_util::CursorAction::Out, &self.populated_goals)?;
                     profile.handle_request(GoalRequest::Delete(selected_goal_id))
                 } else {
                     self.error_log.push_error("No goal selected");
@@ -404,6 +405,10 @@ impl App {
             KeyCode::Backspace => {
                 if let Some(commandline) = &mut self.commandline {
                     commandline.pop();
+
+                    if commandline.is_empty() {
+                        self.commandline = None;
+                    }
                 }
             }
             KeyCode::Esc => {

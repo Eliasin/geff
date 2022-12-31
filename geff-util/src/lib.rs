@@ -331,7 +331,9 @@ impl Cursor {
                             Ok(())
                         }
                         Out => {
-                            selected_goal.pop_child();
+                            if selected_goal.pop_child().is_none() {
+                                *selected_goal_index_path = None;
+                            }
                             Ok(())
                         }
                     },

@@ -747,6 +747,11 @@ impl Profile {
             }
 
             self.remove_goals_from_event_relationships(&child_ids_needing_removal);
+            if let Some(parent_goal_id) = populated_goal.parent_goal_id {
+                if let Some(parent_goal) = self.goals.get_mut(&parent_goal_id) {
+                    parent_goal.remove_child(goal_id);
+                }
+            }
 
             Some(populated_goal)
         } else {

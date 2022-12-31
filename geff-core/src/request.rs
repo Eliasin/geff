@@ -11,6 +11,10 @@ pub enum GoalRequest {
         goal_id: GoalId,
         effort: u32,
     },
+    RemoveEffort {
+        goal_id: GoalId,
+        effort: u32,
+    },
     Focus(GoalId),
     Unfocus(GoalId),
     FocusSingle(GoalId),
@@ -50,7 +54,14 @@ impl GoalRequestHandler for ProfileAndDateTime<'_> {
                 self.0.goals.get_mut(&goal_id).map_or(vec![], |goal| {
                     goal.add_effort(effort);
 
-                    vec![GoalEvent::Add { goal_id }]
+                    vec![GoalEvent::AddEffort { goal_id, effort }]
+                })
+            }
+            GoalRequest::RemoveEffort { goal_id, effort } => {
+                self.0.goals.get_mut(&goal_id).map_or(vec![], |goal| {
+                    goal.remove_effort(effort);
+
+                    vec![GoalEvent::RemoveEffort { goal_id, effort }]
                 })
             }
             GoalRequest::Focus(goal_id) => {

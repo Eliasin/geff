@@ -383,6 +383,36 @@ impl App {
                     vec![]
                 }
             }
+            Command::AddEffort { effort } => {
+                if let Cursor::SelectedGoal(Some(selected_goal)) = &self.cursor {
+                    let selected_goal_id =
+                        get_selected_goal_id(selected_goal, &self.populated_goals)?;
+
+                    profile.handle_request(GoalRequest::AddEffort {
+                        goal_id: selected_goal_id,
+                        effort,
+                    })
+                } else {
+                    self.error_log.push_error("No goal selected");
+
+                    vec![]
+                }
+            }
+            Command::RemoveEffort { effort } => {
+                if let Cursor::SelectedGoal(Some(selected_goal)) = &self.cursor {
+                    let selected_goal_id =
+                        get_selected_goal_id(selected_goal, &self.populated_goals)?;
+
+                    profile.handle_request(GoalRequest::RemoveEffort {
+                        goal_id: selected_goal_id,
+                        effort,
+                    })
+                } else {
+                    self.error_log.push_error("No goal selected");
+
+                    vec![]
+                }
+            }
         };
 
         self.persistent_state

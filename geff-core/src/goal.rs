@@ -18,6 +18,10 @@ pub enum GoalEvent {
         goal_id: GoalId,
         effort: u32,
     },
+    RemoveEffort {
+        goal_id: GoalId,
+        effort: u32,
+    },
     Focus {
         focus_root_id: GoalId,
         focused_children: HashSet<GoalId>,
@@ -103,7 +107,7 @@ impl Goal {
     }
 
     pub fn remove_effort(&mut self, effort: u32) {
-        self.effort_to_date -= effort
+        self.effort_to_date = self.effort_to_date.saturating_sub(effort);
     }
 
     pub fn rescope(&mut self, new_effort: u32) {

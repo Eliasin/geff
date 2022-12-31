@@ -1,5 +1,6 @@
 use nom::{
     branch::alt,
+    bytes::complete::tag,
     character::complete::{char, multispace1, none_of, u32},
     combinator::{eof, map},
     multi::many1,
@@ -18,6 +19,12 @@ pub enum Command {
         child_name: String,
         child_effort_to_complete: u32,
         parent_effort_removed: u32,
+    },
+    AddEffort {
+        effort: u32,
+    },
+    RemoveEffort {
+        effort: u32,
     },
 }
 
@@ -42,6 +49,20 @@ fn delete_command(input: &str) -> IResult<&str, Command> {
     map(char('d'), |_| Command::Delete)(input)
 }
 
+fn add_effort_command(input: &str) -> IResult<&str, Command> {
+    map(
+        tuple((char('e'), multispace1, u32, eof)),
+        |(_, _, effort, _)| Command::AddEffort { effort },
+    )(input)
+}
+
+fn remove_effort_command(input: &str) -> IResult<&str, Command> {
+    map(
+        tuple((tag("re"), multispace1, u32, eof)),
+        |(_, _, effort, _)| Command::RemoveEffort { effort },
+    )(input)
+}
+
 fn refine_command(input: &str) -> IResult<&str, Command> {
     map(
         tuple((
@@ -64,5 +85,11 @@ fn refine_command(input: &str) -> IResult<&str, Command> {
 }
 
 pub fn command(input: &str) -> IResult<&str, Command> {
-    alt((create_command, delete_command, refine_command))(input)
+    alt((
+        create_command,
+        add_effort_command,
+        remove_effort_command,
+        delete_command,
+        refine_command,
+    ))(input)
 }

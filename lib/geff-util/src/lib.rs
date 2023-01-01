@@ -13,10 +13,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde::{Deserialize, Serialize};
 
 #[allow(unused)]
-#[derive(thiserror::Error, Debug, Clone)]
+#[derive(thiserror::Error, Debug, Clone, Serialize, Deserialize)]
 pub enum LoadError {
     #[error("APP_DATA or $t HOME directory not found: {0}")]
-    NoAppDataOrHomeDirectory(#[from] VarError),
+    NoAppDataOrHomeDirectory(String),
     #[error("Failed to create profile data at {0}: {1}")]
     ProfileDataCreation(PathBuf, String),
     #[error("Failed to read profile data at {0}: {1}")]
@@ -25,6 +25,12 @@ pub enum LoadError {
     MalformedProfileDataFile(PathBuf, String),
     #[error("Failed to write default data to new file at {0}: {1}")]
     FailureToWriteDefaultData(PathBuf, String),
+}
+
+impl From<VarError> for LoadError {
+    fn from(value: VarError) -> Self {
+        LoadError::NoAppDataOrHomeDirectory(value.to_string())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]

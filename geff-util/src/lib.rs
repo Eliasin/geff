@@ -1,6 +1,5 @@
 use std::env::VarError;
 use std::fmt::Debug;
-use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use geff_core::goal::{GoalEvent, GoalId, PopulatedGoal};
@@ -8,7 +7,6 @@ use geff_core::profile::goal_traversal::{traverse_populated_goal_children, GoalC
 use geff_core::profile::Profile;
 
 use serde::de::DeserializeOwned;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +49,10 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> From<P
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::{Read, Write};
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(target_arch = "wasm32"))]
 impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> PersistentState<C> {
     #[cfg(target_os = "windows")]
@@ -175,13 +177,13 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> Persis
 }
 
 #[cfg(target_arch = "wasm32")]
-impl PersistentState {
+impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> PersistentState<C> {
     pub async fn load() -> Self {
         todo!()
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectedGoal {
     root_goal_index: usize,
     child_index_path: GoalChildIndexPath,
@@ -217,7 +219,7 @@ pub enum CursorError {
     TraversalError(SelectedGoal),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cursor {
     SelectedGoal(Option<SelectedGoal>),
 }
@@ -228,7 +230,7 @@ impl Default for Cursor {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum CursorAction {
     Up,
     Down,

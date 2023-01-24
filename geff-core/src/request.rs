@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     goal::{Goal, GoalEvent, GoalId},
     profile::ProfileAndDateTime,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GoalRequest {
     AddEffort {
         goal_id: GoalId,

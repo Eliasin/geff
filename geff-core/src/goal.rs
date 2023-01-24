@@ -73,11 +73,16 @@ pub struct Goal {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PopulatedGoal {
     pub id: GoalId,
+    #[serde(rename = "parentGoalId")]
     pub parent_goal_id: Option<GoalId>,
     pub name: String,
+    #[serde(rename = "effortToDate")]
     pub effort_to_date: u32,
+    #[serde(rename = "effortToComplete")]
     pub effort_to_complete: u32,
+    #[serde(rename = "maxChildLayerWidth")]
     pub max_child_layer_width: usize,
+    #[serde(rename = "maxChildLayerDepth")]
     pub max_child_depth: usize,
     pub children: Vec<PopulatedGoal>,
 }

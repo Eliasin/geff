@@ -1,0 +1,37 @@
+:root {
+  --commandline-text-size: 14px;
+  --commandline-background-color: gray;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  width: 100vw;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  width: 100%;
+}
+
+.main {
+  width: 100%;
+  height: auto;
+}
+
+.commandline {
+  background-color: var(--commandline-background-color);
+  width: 100%;
+  height: 1.5em;
+  text-align: left;
+  vertical-align: baseline;
+  font-size: var(--commandline-text-size);
+}

@@ -3,4 +3,5 @@ resolver = "2"
 members = [
         "geff-core",
         "geff-util",
+	"geff-tauri/src-tauri",
 ]

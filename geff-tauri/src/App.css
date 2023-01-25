@@ -1,8 +1,3 @@
-:root {
-  --commandline-text-size: 14px;
-  --commandline-background-color: gray;
-}
-
 body {
   margin: 0;
   height: 100vh;

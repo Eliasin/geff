@@ -230,11 +230,15 @@ impl Default for Cursor {
     }
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Debug)]
 pub enum CursorAction {
+    #[serde(rename = "up")]
     Up,
+    #[serde(rename = "down")]
     Down,
+    #[serde(rename = "in")]
     In,
+    #[serde(rename = "out")]
     Out,
 }
 

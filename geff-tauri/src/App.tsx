@@ -1,16 +1,15 @@
 import { useEffect } from "react";
 import {
   formatCommandline,
-  handleKeyPressEvent,
-  invokeCommand,
-  loadCommand,
   useAppDispatch,
   useCommandline,
   useGoalState,
   PopulatedGoal,
+  useCommandlineDisplayState,
 } from "./Store";
 
 import "./App.css";
+import { keyboardEvent, loadCommand } from "./Event";
 
 function Goal({
   goal,
@@ -23,38 +22,96 @@ function Goal({
   focusedGoals: Array<number>;
   key: number;
 }): JSX.Element {
-  return <div key={key}>{goal.name}</div>;
+  let prefix = "";
+
+  if (selectedGoalId !== null && selectedGoalId === goal.id) {
+    prefix += "*";
+  }
+  if (focusedGoals.includes(goal.id)) {
+    prefix += "F";
+  }
+  if (prefix !== "") {
+    prefix += " ";
+  }
+
+  const progressText =
+    "(" + goal.effortToDate + "/" + goal.effortToComplete + ")";
+
+  return (
+    <div>
+      <div key={key}>{prefix + goal.name + " " + progressText}</div>
+      <Goals
+        goals={goal.children}
+        selectedGoalId={selectedGoalId}
+        focusedGoals={focusedGoals}
+      />
+    </div>
+  );
 }
 
-function Goals(): JSX.Element {
+function Goals({
+  goals,
+  selectedGoalId,
+  focusedGoals,
+}: {
+  goals: Array<PopulatedGoal>;
+  selectedGoalId?: number;
+  focusedGoals: Array<number>;
+}): JSX.Element {
+  return (
+    <div>
+      {goals.map((goal) =>
+        Goal({ goal, focusedGoals, selectedGoalId, key: goal.id })
+      )}
+    </div>
+  );
+}
+
+function RootGoals(): JSX.Element {
   const goals = useGoalState();
-  console.log(goals);
 
   if (goals.type === "loaded") {
     const { populatedGoals, focusedGoals, selectedGoalId } = goals;
 
     return (
-      <div>
-        {populatedGoals.map((goal) =>
-          Goal({ goal, focusedGoals, selectedGoalId, key: goal.id })
-        )}
-      </div>
+      <Goals
+        goals={populatedGoals}
+        selectedGoalId={selectedGoalId}
+        focusedGoals={focusedGoals}
+      />
     );
   } else {
     return <div>UNLOADED</div>;
   }
 }
 
-function App() {
+function Commandline(): JSX.Element {
   const commandline = useCommandline();
+  const commandlineDisplay = useCommandlineDisplayState();
+
+  const { backgroundColor, fontSizePixels, fontColor } = commandlineDisplay;
+
+  console.log(backgroundColor);
+
+  return (
+    <div
+      style={{
+        backgroundColor,
+        fontSize: fontSizePixels + "px",
+        color: fontColor,
+      }}
+      className="commandline"
+    >
+      {formatCommandline(commandline)}
+    </div>
+  );
+}
+
+function App() {
   const dispatch = useAppDispatch();
 
   function dispatchKeyPress(event: KeyboardEvent) {
-    dispatch(handleKeyPressEvent(event.key));
-
-    if (event.key === "Enter") {
-      dispatch(invokeCommand());
-    }
+    dispatch(keyboardEvent(event));
   }
 
   useEffect(() => {
@@ -72,9 +129,9 @@ function App() {
   return (
     <div className="app">
       <div className="main">
-        <Goals />
+        <RootGoals />
       </div>
-      <div className="commandline">{formatCommandline(commandline)}</div>
+      <Commandline />
     </div>
   );
 }

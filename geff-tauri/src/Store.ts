@@ -3,118 +3,79 @@ import {
   createSlice,
   PayloadAction,
   ThunkAction,
-  ThunkDispatch,
 } from "@reduxjs/toolkit";
-import { invoke } from "@tauri-apps/api/tauri";
 import { useDispatch, useSelector } from "react-redux";
-import { AnyAction, combineReducers, Dispatch } from "redux";
+import { AnyAction, combineReducers } from "redux";
 
-type CommandlineState = {
-  content: string | null;
+type CommandlineTyping = { type: "typing"; content: string };
+type CommandlineError = { type: "error"; error: string };
+type CommandlineEmpty = { type: "empty" };
+
+type CommandlineStore = {
+  state: CommandlineTyping | CommandlineError | CommandlineEmpty;
 };
 
 const commandlineSlice = createSlice({
   name: "commandline",
-  initialState: { content: null } as CommandlineState,
+  initialState: { state: { type: "empty" } } as CommandlineStore,
   reducers: {
     handleKeyPressEvent: (
-      state: CommandlineState,
+      store: CommandlineStore,
       action: PayloadAction<string>
     ) => {
       const key = action.payload;
-      if (state.content === null) {
+      if (store.state.type === "empty" || store.state.type === "error") {
         if (key === ":") {
-          state.content = "";
+          store.state = { type: "typing", content: ":" };
+        } else if (key === "Escape") {
+          store.state = { type: "empty" };
         }
       } else {
-        if (state.content !== null) {
+        if (store.state !== null && store.state.type === "typing") {
           if (key === "Escape") {
-            state.content = null;
+            store.state = { type: "empty" };
           } else if (key === "Backspace" || key === "Delete") {
-            if (state.content.length > 1) {
-              state.content = state.content.slice(0, state.content.length - 1);
-            } else if (state.content.length === 1) {
-              state.content = null;
+            if (store.state.content.length > 1) {
+              store.state.content = store.state.content.slice(
+                0,
+                store.state.content.length - 1
+              );
+            } else if (store.state.content.length === 1) {
+              store.state = { type: "empty" };
             }
-          } else if (key !== "Enter") {
-            state.content = state.content + key;
+          } else if (key === "Enter") {
+            store.state = { type: "empty" };
+          } else {
+            store.state.content = store.state.content + key;
           }
         }
       }
     },
-    clear: (state: CommandlineState) => {
-      state.content = null;
+    displayError: (
+      store: CommandlineStore,
+      action: PayloadAction<{ error: string }>
+    ) => {
+      const { error } = action.payload;
+      store.state = { type: "error", error };
     },
   },
 });
 
-export type AppThunkDispatch = ThunkDispatch<RootState, unknown, AnyAction>;
-
-async function fetchStateThunk(dispatch: AppThunkDispatch) {
-  const frontendState: FrontendState | null = await invoke("fetch");
-
-  if (frontendState !== null) {
-    console.log(frontendState);
-    dispatch(
-      load({
-        type: "loaded",
-        ...frontendState,
-      })
-    );
-  }
-}
-
-async function invokeCommandThunk(
-  dispatch: AppThunkDispatch,
-  getState: typeof store.getState
-) {
-  await invoke("app_command", {
-    command: getState().commandline.content ?? "",
-  });
-
-  await fetchStateThunk(dispatch);
-
-  dispatch(clear());
-}
-
-export function invokeCommand() {
-  return invokeCommandThunk;
-}
-
-type FrontendState = {
-  populatedGoals: Array<PopulatedGoal>;
-  selectedGoalId?: number;
-  focusedGoals: Array<number>;
-};
-
-export async function loadCommandThunk(dispatch: AppThunkDispatch) {
-  await invoke("load");
-
-  await fetchStateThunk(dispatch);
-}
-
-export function loadCommand(): ThunkAction<
-  void,
-  RootState,
-  unknown,
-  AnyAction
-> {
-  return loadCommandThunk;
-}
-
-export function useCommandline(): CommandlineState {
+export function useCommandline(): CommandlineStore {
   return useSelector((root: RootState) => root.commandline);
 }
 
-export const { clear, handleKeyPressEvent } = commandlineSlice.actions;
-
-export function formatCommandline(state: CommandlineState) {
-  if (state.content === null) {
+export function formatCommandline(state: CommandlineStore) {
+  if (state.state.type === "empty") {
     return "";
-  } else {
-    return ":" + state.content + "|";
+  } else if (state.state.type === "typing") {
+    return state.state.content + "|";
+  } else if (state.state.type === "error") {
+    return state.state.error;
   }
 }
+
+export const { handleKeyPressEvent, displayError } = commandlineSlice.actions;
 
 export type PopulatedGoal = {
   id: number;
@@ -140,7 +101,7 @@ type GoalStateUnloaded = {
 
 export type GoalState = { state: GoalStateLoaded | GoalStateUnloaded };
 
-export const goalSlice = createSlice({
+const goalSlice = createSlice({
   name: "goal",
   initialState: { state: { type: "unloaded" } } as GoalState,
   reducers: {
@@ -150,15 +111,54 @@ export const goalSlice = createSlice({
   },
 });
 
-export const { load } = goalSlice.actions;
-
 export function useGoalState(): GoalStateLoaded | GoalStateUnloaded {
   return useSelector((root: RootState) => root.goal.state);
 }
 
+export const { load } = goalSlice.actions;
+
+export type CommandlineDisplayState = {
+  fontSizePixels: number;
+  backgroundColor: string;
+  fontColor: string;
+};
+
+export type DisplayState = {
+  commandline: CommandlineDisplayState;
+};
+
+type DisplayStore = {
+  state: DisplayState;
+};
+
+const displaySlice = createSlice({
+  name: "display",
+  initialState: {
+    state: {
+      commandline: {
+        fontSizePixels: 14,
+        backgroundColor: "gray",
+        fontColor: "black",
+      },
+    },
+  } as DisplayStore,
+  reducers: {
+    update: (state: DisplayStore, action: PayloadAction<DisplayState>) => {
+      state.state = action.payload;
+    },
+  },
+});
+
+export function useCommandlineDisplayState(): CommandlineDisplayState {
+  return useSelector((root: RootState) => root.display.state.commandline);
+}
+
+export const { update } = displaySlice.actions;
+
 const rootReducer = combineReducers({
   commandline: commandlineSlice.reducer,
   goal: goalSlice.reducer,
+  display: displaySlice.reducer,
 });
 
 const store = configureStore({ reducer: rootReducer });
@@ -172,4 +172,5 @@ export function useAppDispatch() {
 }
 
 export type RootState = ReturnType<typeof store.getState>;
+export type RootGetState = typeof store.getState;
 export default store;

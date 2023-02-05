@@ -59,6 +59,7 @@ pub enum AppCommand {
     CursorAction(CursorAction),
     DisplayCommand(DisplayCommand),
     LoadRequest,
+    SaveRequest,
 }
 
 pub enum AppState {
@@ -87,19 +88,12 @@ impl AppState {
     pub fn try_into_frontend(&self) -> Result<Option<FrontendAppState>, String> {
         let selected_goal_id = if let AppState::Loaded {
             persistent_state: _,
-            cursor,
+            cursor: Cursor::SelectedGoal(Some(selected_goal)),
             populated_goals,
             current_datetime: _,
         } = self
         {
-            if let Cursor::SelectedGoal(Some(selected_goal)) = cursor {
-                Some(
-                    get_selected_goal_id(selected_goal, populated_goals)
-                        .map_err(|e| e.to_string())?,
-                )
-            } else {
-                None
-            }
+            Some(get_selected_goal_id(selected_goal, populated_goals).map_err(|e| e.to_string())?)
         } else {
             None
         };
@@ -136,14 +130,22 @@ impl AppState {
         {
             match command {
                 AppCommand::LoadRequest => {
-                    let persistent_state = match PersistentState::<Config>::load("geff-tauri").await
+                    let config_data_path = match PersistentState::<Config>::data_path("geff-tauri")
                     {
-                        Ok(persistent_state) => persistent_state,
+                        Ok(config_data_path) => config_data_path,
                         Err(e) => {
                             *self = AppState::Error(e.to_string());
                             return Ok(());
                         }
                     };
+                    let persistent_state =
+                        match PersistentState::<Config>::load(config_data_path).await {
+                            Ok(persistent_state) => persistent_state,
+                            Err(e) => {
+                                *self = AppState::Error(e.to_string());
+                                return Ok(());
+                            }
+                        };
                     let populated_goals = persistent_state.profile.populate_goals();
 
                     *self = AppState::Loaded {
@@ -178,12 +180,37 @@ impl AppState {
                         CommandlineDisplayCommand::ChangeFontColor(color) => *font_color = color,
                     }
                 }
+                AppCommand::SaveRequest => {
+                    let config_data_path = match PersistentState::<Config>::data_path("geff-tauri")
+                    {
+                        Ok(config_data_path) => config_data_path,
+                        Err(e) => {
+                            *self = AppState::Error(e.to_string());
+                            return Ok(());
+                        }
+                    };
+                    match persistent_state.save_to_file(config_data_path).await {
+                        Ok(config_data_path) => config_data_path,
+                        Err(e) => {
+                            *self = AppState::Error(e.to_string());
+                            return Ok(());
+                        }
+                    };
+                }
             };
 
             Ok(())
         } else {
             if let AppCommand::LoadRequest = command {
-                let persistent_state = match PersistentState::<Config>::load("geff-tauri").await {
+                let config_data_path = match PersistentState::<Config>::data_path("geff-tauri") {
+                    Ok(config_data_path) => config_data_path,
+                    Err(e) => {
+                        *self = AppState::Error(e.to_string());
+                        return Ok(());
+                    }
+                };
+                let persistent_state = match PersistentState::<Config>::load(config_data_path).await
+                {
                     Ok(persistent_state) => persistent_state,
                     Err(e) => {
                         *self = AppState::Error(e.to_string());

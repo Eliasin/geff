@@ -20,6 +20,9 @@ body {
 .main {
   width: 100%;
   height: auto;
+  margin-top: 10px;
+  margin-left: 5px;
+  margin-right: 5px;
 }
 
 .commandline {
@@ -29,4 +32,44 @@ body {
   text-align: left;
   vertical-align: baseline;
   font-size: var(--commandline-text-size);
+}
+
+.goal {
+  display: flex;
+  flex-direction: row;
+  margin: 4px;
+  background-color: gray;
+  width: fit-content;
+  padding: 10px;
+}
+
+.goal-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.goal-status {
+  height: 32px;
+  margin: auto;
+}
+
+.goal-progress {
+  margin: auto;
+}
+
+.goals {
+  display: flex;
+  flex-direction: column;
+  margin-left: 4px;
+}
+
+.root-goals {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+}
+
+.selected-goal {
+  background-color: #0262b0;
 }

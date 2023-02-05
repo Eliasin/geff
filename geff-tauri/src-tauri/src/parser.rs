@@ -28,6 +28,16 @@ pub enum GoalCommand {
     RemoveEffort {
         effort: u32,
     },
+    Focus,
+    Unfocus,
+    FocusSingle,
+    UnfocusSingle,
+    Rescope {
+        new_effort_to_complete: u32,
+    },
+    Rename {
+        new_name: String,
+    },
 }
 
 fn quoted_string(input: &str) -> IResult<&str, String> {
@@ -37,9 +47,13 @@ fn quoted_string(input: &str) -> IResult<&str, String> {
     )(input)
 }
 
+fn name(input: &str) -> IResult<&str, String> {
+    alt((quoted_string, map(alphanumeric1, |s: &str| s.to_string())))(input)
+}
+
 fn create_command(input: &str) -> IResult<&str, GoalCommand> {
     map(
-        tuple((char('c'), multispace1, quoted_string, multispace1, u32, eof)),
+        tuple((char('c'), multispace1, name, multispace1, u32, eof)),
         |(_, _, name, _, effort_to_complete, _)| GoalCommand::Create {
             name,
             effort_to_complete,
@@ -70,7 +84,7 @@ fn refine_command(input: &str) -> IResult<&str, GoalCommand> {
         tuple((
             char('r'),
             multispace1,
-            quoted_string,
+            name,
             multispace1,
             u32,
             multispace1,
@@ -86,6 +100,37 @@ fn refine_command(input: &str) -> IResult<&str, GoalCommand> {
     )(input)
 }
 
+fn focus_command(input: &str) -> IResult<&str, GoalCommand> {
+    map(tag("f"), |_| GoalCommand::Focus)(input)
+}
+
+fn unfocus_command(input: &str) -> IResult<&str, GoalCommand> {
+    map(tag("uf"), |_| GoalCommand::Unfocus)(input)
+}
+
+fn focus_single_command(input: &str) -> IResult<&str, GoalCommand> {
+    map(tag("fs"), |_| GoalCommand::FocusSingle)(input)
+}
+
+fn unfocus_single_command(input: &str) -> IResult<&str, GoalCommand> {
+    map(tag("ufs"), |_| GoalCommand::UnfocusSingle)(input)
+}
+
+fn rescope_command(input: &str) -> IResult<&str, GoalCommand> {
+    map(
+        tuple((tag("rs"), multispace1, u32)),
+        |(_, _, new_effort_to_complete)| GoalCommand::Rescope {
+            new_effort_to_complete,
+        },
+    )(input)
+}
+
+fn rename_command(input: &str) -> IResult<&str, GoalCommand> {
+    map(tuple((tag("rn"), multispace1, name)), |(_, _, new_name)| {
+        GoalCommand::Rename { new_name }
+    })(input)
+}
+
 fn goal_command(input: &str) -> IResult<&str, GoalCommand> {
     alt((
         create_command,
@@ -93,6 +138,12 @@ fn goal_command(input: &str) -> IResult<&str, GoalCommand> {
         remove_effort_command,
         delete_command,
         refine_command,
+        focus_command,
+        unfocus_command,
+        focus_single_command,
+        unfocus_single_command,
+        rescope_command,
+        rename_command,
     ))(input)
 }
 
@@ -132,20 +183,20 @@ fn hex_code(input: &str) -> IResult<&str, String> {
 }
 
 fn color(input: &str) -> IResult<&str, String> {
-    alt((hex_code, map(alphanumeric1, |s: &str| s.to_string())))(input)
+    alt((hex_code, name))(input)
 }
 
 fn change_background_color(input: &str) -> IResult<&str, DisplayCommand> {
     map(
         tuple((tag("dcb"), multispace1::<&str, _>, color)),
-        |(_, _, color)| CommandlineDisplayCommand::ChangeBackgroundColor(color.to_string()).into(),
+        |(_, _, color)| CommandlineDisplayCommand::ChangeBackgroundColor(color).into(),
     )(input)
 }
 
 fn change_font_color(input: &str) -> IResult<&str, DisplayCommand> {
     map(
         tuple((tag("dcf"), multispace1::<&str, _>, color)),
-        |(_, _, color)| CommandlineDisplayCommand::ChangeFontColor(color.to_string()).into(),
+        |(_, _, color)| CommandlineDisplayCommand::ChangeFontColor(color).into(),
     )(input)
 }
 
@@ -155,6 +206,7 @@ fn display_command(input: &str) -> IResult<&str, DisplayCommand> {
 
 #[derive(Debug, Clone)]
 pub enum ControlCommand {
+    Save,
     Quit,
 }
 
@@ -162,8 +214,12 @@ fn quit_command(input: &str) -> IResult<&str, ControlCommand> {
     map(tuple((tag("q"), eof)), |_| ControlCommand::Quit)(input)
 }
 
+fn save_command(input: &str) -> IResult<&str, ControlCommand> {
+    map(tuple((tag("w"), eof)), |_| ControlCommand::Save)(input)
+}
+
 fn control_command(input: &str) -> IResult<&str, ControlCommand> {
-    quit_command(input)
+    alt((quit_command, save_command))(input)
 }
 
 #[derive(Debug, Clone)]
@@ -181,7 +237,7 @@ pub fn command(input: &str) -> IResult<&str, Command> {
                 map(display_command, |display_command| {
                     Command::Display(display_command)
                 }),
-                map(goal_command, |goal_command| Command::Goal(goal_command)),
+                map(goal_command, Command::Goal),
                 map(control_command, |control_command| {
                     Command::Control(control_command)
                 }),

@@ -41,89 +41,99 @@ pub async fn cursor_action(
     Ok(())
 }
 
-async fn handle_goal_command(app_state: &mut AppState, command: GoalCommand) -> anyhow::Result<()> {
-    let selected_goal_id = if let AppState::Loaded {
-        persistent_state: _,
-        cursor,
-        populated_goals,
-        current_datetime: _,
-    } = &mut *app_state
-    {
-        if let Cursor::SelectedGoal(Some(selected_goal)) = cursor {
-            Some(get_selected_goal_id(selected_goal, populated_goals)?)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    match command {
+async fn handle_untargeted_goal_command(
+    app_state: &mut AppState,
+    command: GoalCommand,
+) -> anyhow::Result<bool> {
+    Ok(match command {
         parser::GoalCommand::Create {
             name,
             effort_to_complete,
         } => {
             app_state
-                .handle_command(AppCommand::GoalRequest(GoalRequest::Add {
+                .handle_command(AppCommand::GoalRequest(GoalRequest::Create {
                     name,
                     effort_to_complete,
                 }))
-                .await
+                .await?;
+
+            true
         }
+        _ => false,
+    })
+}
+
+async fn handle_targeted_goal_command(
+    app_state: &mut AppState,
+    command: GoalCommand,
+) -> anyhow::Result<bool> {
+    let selected_goal_id = if let AppState::Loaded {
+        persistent_state: _,
+        cursor: Cursor::SelectedGoal(Some(selected_goal)),
+        populated_goals,
+        current_datetime: _,
+    } = &mut *app_state
+    {
+        get_selected_goal_id(selected_goal, populated_goals)?
+    } else {
+        return Ok(false);
+    };
+
+    let command = match command {
+        parser::GoalCommand::Create { .. } => return Ok(false),
         parser::GoalCommand::Delete => {
-            if let Some(selected_goal_id) = selected_goal_id {
-                app_state
-                    .handle_command(AppCommand::GoalRequest(GoalRequest::Delete(
-                        selected_goal_id,
-                    )))
-                    .await
-            } else {
-                Ok(())
-            }
+            AppCommand::GoalRequest(GoalRequest::Delete(selected_goal_id))
         }
         parser::GoalCommand::Refine {
             child_name,
             child_effort_to_complete,
             parent_effort_removed,
-        } => {
-            if let Some(selected_goal_id) = selected_goal_id {
-                app_state
-                    .handle_command(AppCommand::GoalRequest(GoalRequest::Refine {
-                        parent_goal_id: selected_goal_id,
-                        parent_effort_removed,
-                        child_name,
-                        child_effort_to_complete,
-                    }))
-                    .await
-            } else {
-                Ok(())
-            }
-        }
+        } => AppCommand::GoalRequest(GoalRequest::Refine {
+            parent_goal_id: selected_goal_id,
+            parent_effort_removed,
+            child_name,
+            child_effort_to_complete,
+        }),
         parser::GoalCommand::AddEffort { effort } => {
-            if let Some(selected_goal_id) = selected_goal_id {
-                app_state
-                    .handle_command(AppCommand::GoalRequest(GoalRequest::AddEffort {
-                        goal_id: selected_goal_id,
-                        effort,
-                    }))
-                    .await
-            } else {
-                Ok(())
-            }
+            AppCommand::GoalRequest(GoalRequest::AddEffort {
+                goal_id: selected_goal_id,
+                effort,
+            })
         }
         parser::GoalCommand::RemoveEffort { effort } => {
-            if let Some(selected_goal_id) = selected_goal_id {
-                app_state
-                    .handle_command(AppCommand::GoalRequest(GoalRequest::RemoveEffort {
-                        goal_id: selected_goal_id,
-                        effort,
-                    }))
-                    .await
-            } else {
-                Ok(())
-            }
+            AppCommand::GoalRequest(GoalRequest::RemoveEffort {
+                goal_id: selected_goal_id,
+                effort,
+            })
         }
+        parser::GoalCommand::Focus => todo!(),
+        parser::GoalCommand::Unfocus => todo!(),
+        parser::GoalCommand::FocusSingle => todo!(),
+        parser::GoalCommand::UnfocusSingle => todo!(),
+        parser::GoalCommand::Rescope {
+            new_effort_to_complete,
+        } => AppCommand::GoalRequest(GoalRequest::Rescope {
+            goal_id: selected_goal_id,
+            new_effort_to_complete,
+        }),
+        parser::GoalCommand::Rename { new_name } => AppCommand::GoalRequest(GoalRequest::Rename {
+            goal_id: selected_goal_id,
+            new_name,
+        }),
+    };
+
+    app_state.handle_command(command).await?;
+
+    Ok(true)
+}
+
+async fn handle_goal_command(app_state: &mut AppState, command: GoalCommand) -> anyhow::Result<()> {
+    if !handle_untargeted_goal_command(app_state, command.clone()).await? {
+        // false return means action us unhandled and nothing was triggered
+        handle_targeted_goal_command(app_state, command).await?;
     }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -152,6 +162,10 @@ pub async fn app_command(
 
                 Ok(())
             }
+            ControlCommand::Save => app_state
+                .handle_command(AppCommand::SaveRequest)
+                .await
+                .map_err(|e| e.to_string()),
         },
     }
 }

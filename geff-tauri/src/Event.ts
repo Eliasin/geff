@@ -109,7 +109,7 @@ export function keyboardEvent(event: KeyboardEvent) {
 
     dispatch(handleKeyPressEvent(event.key));
 
-    if (commandlineState.state.type === "typing") {
+    if (commandlineState.state.type !== "typing") {
       switch (event.key) {
         case "h": {
           dispatch(cursorAction("out"));

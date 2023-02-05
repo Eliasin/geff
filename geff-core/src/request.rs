@@ -27,7 +27,7 @@ pub enum GoalRequest {
     ProcessDateTime {
         datetime: DateTime<Utc>,
     },
-    Add {
+    Create {
         name: String,
         effort_to_complete: u32,
     },
@@ -110,7 +110,7 @@ impl GoalRequestHandler for ProfileAndDateTime<'_> {
                     }]
                 },
             ),
-            GoalRequest::Add {
+            GoalRequest::Create {
                 name,
                 effort_to_complete,
             } => vec![GoalEvent::Add {

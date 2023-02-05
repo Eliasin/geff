@@ -11,6 +11,31 @@ import {
 import "./App.css";
 import { keyboardEvent, loadCommand } from "./Event";
 
+function GoalStatusIndicator({
+  goal,
+  selectedGoalId,
+  focusedGoals,
+}: {
+  goal: PopulatedGoal;
+  selectedGoalId?: number;
+  focusedGoals: Array<number>;
+}): JSX.Element | null {
+  const isSelected = selectedGoalId !== null && selectedGoalId === goal.id;
+  const isFocused = focusedGoals.includes(goal.id);
+
+  const focusedToken = String.fromCodePoint(0x2605);
+
+  if (isSelected && isFocused) {
+    return <div className="goal-status">{focusedToken}</div>;
+  } else if (isSelected) {
+    return <div className="goal-status">{focusedToken}</div>;
+  } else if (isFocused) {
+    return <div className="goal-status">{focusedToken}</div>;
+  } else {
+    return <div className="goal-status"></div>;
+  }
+}
+
 function Goal({
   goal,
   selectedGoalId,
@@ -22,24 +47,26 @@ function Goal({
   focusedGoals: Array<number>;
   key: number;
 }): JSX.Element {
-  let prefix = "";
-
-  if (selectedGoalId !== null && selectedGoalId === goal.id) {
-    prefix += "*";
-  }
-  if (focusedGoals.includes(goal.id)) {
-    prefix += "F";
-  }
-  if (prefix !== "") {
-    prefix += " ";
-  }
+  const isSelected = selectedGoalId !== null && selectedGoalId === goal.id;
+  const hasChildren = goal.children.length > 0;
 
   const progressText =
     "(" + goal.effortToDate + "/" + goal.effortToComplete + ")";
 
   return (
-    <div>
-      <div key={key}>{prefix + goal.name + " " + progressText}</div>
+    <div className={isSelected ? "goal selected-goal" : "goal"} key={key}>
+      <div
+        className="goal-info"
+        style={{ marginRight: hasChildren ? "4px" : undefined }}
+      >
+        <GoalStatusIndicator
+          goal={goal}
+          selectedGoalId={selectedGoalId}
+          focusedGoals={focusedGoals}
+        />
+        <div className="goal-name">{goal.name}</div>
+        <div className="goal-progress">{progressText}</div>
+      </div>
       <Goals
         goals={goal.children}
         selectedGoalId={selectedGoalId}
@@ -59,7 +86,7 @@ function Goals({
   focusedGoals: Array<number>;
 }): JSX.Element {
   return (
-    <div>
+    <div className="goals">
       {goals.map((goal) =>
         Goal({ goal, focusedGoals, selectedGoalId, key: goal.id })
       )}
@@ -72,13 +99,12 @@ function RootGoals(): JSX.Element {
 
   if (goals.type === "loaded") {
     const { populatedGoals, focusedGoals, selectedGoalId } = goals;
-
     return (
-      <Goals
-        goals={populatedGoals}
-        selectedGoalId={selectedGoalId}
-        focusedGoals={focusedGoals}
-      />
+      <div className="root-goals">
+        {populatedGoals.map((goal) =>
+          Goal({ goal, focusedGoals, selectedGoalId, key: goal.id })
+        )}
+      </div>
     );
   } else {
     return <div>UNLOADED</div>;
@@ -90,8 +116,6 @@ function Commandline(): JSX.Element {
   const commandlineDisplay = useCommandlineDisplayState();
 
   const { backgroundColor, fontSizePixels, fontColor } = commandlineDisplay;
-
-  console.log(backgroundColor);
 
   return (
     <div

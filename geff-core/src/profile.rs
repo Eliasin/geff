@@ -323,7 +323,7 @@ pub mod goal_traversal {
                 if let Some(width_counter) = widths.get_mut(insert_index) {
                     *width_counter += 1;
                 } else {
-                    widths.extend((0..(insert_index - widths.len())).into_iter().map(|_| 0));
+                    widths.extend((0..(insert_index - widths.len())).map(|_| 0));
                     widths.push(1);
                 }
             };

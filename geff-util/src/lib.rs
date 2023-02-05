@@ -1,6 +1,6 @@
 use std::env::VarError;
 use std::fmt::Debug;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use geff_core::goal::{GoalEvent, GoalId, PopulatedGoal};
 use geff_core::profile::goal_traversal::{traverse_populated_goal_children, GoalChildIndexPath};
@@ -23,6 +23,14 @@ pub enum LoadError {
     MalformedProfileDataFile(PathBuf, String),
     #[error("Failed to write default data to new file at {0}: {1}")]
     FailureToWriteDefaultData(PathBuf, String),
+}
+
+#[derive(thiserror::Error, Debug, Clone, Serialize, Deserialize)]
+pub enum SaveError {
+    #[error("Failed to save config file due to IO write error: {0}")]
+    WriteError(String),
+    #[error("Failed to serialize config: {0}")]
+    SerializeError(String),
 }
 
 impl From<VarError> for LoadError {
@@ -56,7 +64,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(target_arch = "wasm32"))]
 impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> PersistentState<C> {
     #[cfg(target_os = "windows")]
-    fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
+    pub fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
         let appdata = PathBuf::from(std::env::var("APPDATA")?);
 
         Ok(app_data
@@ -66,35 +74,52 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> Persis
     }
 
     #[cfg(target_os = "linux")]
-    fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
+    pub fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
         let home = PathBuf::from(std::env::var("HOME")?);
         Ok(home.join(format!(".{}", app_name.as_ref())))
     }
 
     #[cfg(target_os = "macos")]
-    fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
+    pub fn default_data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
         Ok(PathBuf::from(format!(
             "~Library/Application Support/{}/Data",
             app_name.as_ref()
         )))
     }
 
-    pub async fn load<S: AsRef<str>>(app_name: S) -> Result<Self, LoadError> {
+    pub fn data_path<S: AsRef<str>>(app_name: S) -> Result<PathBuf, LoadError> {
+        std::env::var("GEFF_CORE_ICED_DATA_PATH")
+            .map(|p| Ok(PathBuf::from(p)))
+            .unwrap_or(Self::default_data_path(app_name))
+    }
+
+    pub async fn save_to_file<P: AsRef<Path>>(&self, p: P) -> Result<(), SaveError> {
         use tokio::fs;
 
-        let profile_data_path = std::env::var("GEFF_CORE_ICED_DATA_PATH")
-            .map(PathBuf::from)
-            .unwrap_or(Self::default_data_path(app_name)?);
+        fs::write(
+            p,
+            rmp_serde::to_vec(self).map_err(|e| SaveError::SerializeError(e.to_string()))?,
+        )
+        .await
+        .map_err(|e| SaveError::WriteError(e.to_string()))
+    }
 
-        if !profile_data_path.exists() {
+    pub async fn load<P: AsRef<Path>>(profile_data_path: P) -> Result<Self, LoadError> {
+        use tokio::fs;
+
+        if !profile_data_path.as_ref().exists() {
             fs::create_dir_all(
                 profile_data_path
+                    .as_ref()
                     .parent()
                     .expect("profile data path to have parent"),
             )
             .await
             .map_err(|e| {
-                LoadError::ProfileDataCreation(profile_data_path.clone(), e.to_string())
+                LoadError::ProfileDataCreation(
+                    profile_data_path.as_ref().to_path_buf(),
+                    e.to_string(),
+                )
             })?;
 
             let default_data = rmp_serde::encode::to_vec(&Self::default())
@@ -103,19 +128,28 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> Persis
             fs::File::create(&profile_data_path)
                 .await
                 .map_err(|e| {
-                    LoadError::ProfileDataCreation(profile_data_path.clone(), e.to_string())
+                    LoadError::ProfileDataCreation(
+                        profile_data_path.as_ref().to_path_buf(),
+                        e.to_string(),
+                    )
                 })?
                 .write_all(&default_data)
                 .await
                 .map_err(|e| {
-                    LoadError::FailureToWriteDefaultData(profile_data_path.clone(), e.to_string())
+                    LoadError::FailureToWriteDefaultData(
+                        profile_data_path.as_ref().to_path_buf(),
+                        e.to_string(),
+                    )
                 })?;
         }
 
-        let mut data_file = fs::File::open(profile_data_path.clone())
+        let mut data_file = fs::File::open(profile_data_path.as_ref())
             .await
             .map_err(|e| {
-                LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
+                LoadError::ProfileDataFileRead(
+                    profile_data_path.as_ref().to_path_buf(),
+                    e.to_string(),
+                )
             })?;
 
         let mut profile_bytes = vec![];
@@ -123,29 +157,35 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> Persis
             .read_to_end(&mut profile_bytes)
             .await
             .map_err(|e| {
-                LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
+                LoadError::ProfileDataFileRead(
+                    profile_data_path.as_ref().to_path_buf(),
+                    e.to_string(),
+                )
             })?;
 
         rmp_serde::decode::from_slice(&profile_bytes).map_err(|e| {
-            LoadError::MalformedProfileDataFile(profile_data_path.clone(), e.to_string())
+            LoadError::MalformedProfileDataFile(
+                profile_data_path.as_ref().to_path_buf(),
+                e.to_string(),
+            )
         })
     }
 
-    pub fn blocking_load<S: AsRef<str>>(app_name: S) -> Result<Self, LoadError> {
+    pub fn blocking_load<P: AsRef<Path>>(profile_data_path: P) -> Result<Self, LoadError> {
         use std::fs;
 
-        let profile_data_path = std::env::var("GEFF_CORE_ICED_DATA_PATH")
-            .map(PathBuf::from)
-            .unwrap_or(Self::default_data_path(app_name)?);
-
-        if !profile_data_path.exists() {
+        if !profile_data_path.as_ref().exists() {
             fs::create_dir_all(
                 profile_data_path
+                    .as_ref()
                     .parent()
                     .expect("profile data path to have parent"),
             )
             .map_err(|e| {
-                LoadError::ProfileDataCreation(profile_data_path.clone(), e.to_string())
+                LoadError::ProfileDataCreation(
+                    profile_data_path.as_ref().to_path_buf(),
+                    e.to_string(),
+                )
             })?;
 
             let default_data = rmp_serde::encode::to_vec(&Self::default())
@@ -153,25 +193,34 @@ impl<C: std::fmt::Debug + Serialize + Clone + Default + DeserializeOwned> Persis
 
             fs::File::create(&profile_data_path)
                 .map_err(|e| {
-                    LoadError::ProfileDataCreation(profile_data_path.clone(), e.to_string())
+                    LoadError::ProfileDataCreation(
+                        profile_data_path.as_ref().to_path_buf(),
+                        e.to_string(),
+                    )
                 })?
                 .write_all(&default_data)
                 .map_err(|e| {
-                    LoadError::FailureToWriteDefaultData(profile_data_path.clone(), e.to_string())
+                    LoadError::FailureToWriteDefaultData(
+                        profile_data_path.as_ref().to_path_buf(),
+                        e.to_string(),
+                    )
                 })?;
         }
 
-        let mut data_file = fs::File::open(profile_data_path.clone()).map_err(|e| {
-            LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
+        let mut data_file = fs::File::open(profile_data_path.as_ref()).map_err(|e| {
+            LoadError::ProfileDataFileRead(profile_data_path.as_ref().to_path_buf(), e.to_string())
         })?;
 
         let mut profile_bytes = vec![];
         data_file.read_to_end(&mut profile_bytes).map_err(|e| {
-            LoadError::ProfileDataFileRead(profile_data_path.clone(), e.to_string())
+            LoadError::ProfileDataFileRead(profile_data_path.as_ref().to_path_buf(), e.to_string())
         })?;
 
         rmp_serde::decode::from_slice(&profile_bytes).map_err(|e| {
-            LoadError::MalformedProfileDataFile(profile_data_path.clone(), e.to_string())
+            LoadError::MalformedProfileDataFile(
+                profile_data_path.as_ref().to_path_buf(),
+                e.to_string(),
+            )
         })
     }
 }

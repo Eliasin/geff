@@ -51,10 +51,13 @@ async fn handle_untargeted_goal_command(
             effort_to_complete,
         } => {
             app_state
-                .handle_command(AppCommand::GoalRequest(GoalRequest::Create {
-                    name,
-                    effort_to_complete,
-                }))
+                .handle_command(
+                    GoalRequest::Create {
+                        name,
+                        effort_to_complete,
+                    }
+                    .into(),
+                )
                 .await?;
 
             true
@@ -80,49 +83,43 @@ async fn handle_targeted_goal_command(
     };
 
     let command = match command {
-        parser::GoalCommand::Create { .. } => return Ok(false),
-        parser::GoalCommand::Delete => {
-            AppCommand::GoalRequest(GoalRequest::Delete(selected_goal_id))
-        }
-        parser::GoalCommand::Refine {
+        GoalCommand::Create { .. } => return Ok(false),
+        GoalCommand::Delete => GoalRequest::Delete(selected_goal_id),
+        GoalCommand::Refine {
             child_name,
             child_effort_to_complete,
             parent_effort_removed,
-        } => AppCommand::GoalRequest(GoalRequest::Refine {
+        } => GoalRequest::Refine {
             parent_goal_id: selected_goal_id,
             parent_effort_removed,
             child_name,
             child_effort_to_complete,
-        }),
-        parser::GoalCommand::AddEffort { effort } => {
-            AppCommand::GoalRequest(GoalRequest::AddEffort {
-                goal_id: selected_goal_id,
-                effort,
-            })
-        }
-        parser::GoalCommand::RemoveEffort { effort } => {
-            AppCommand::GoalRequest(GoalRequest::RemoveEffort {
-                goal_id: selected_goal_id,
-                effort,
-            })
-        }
-        parser::GoalCommand::Focus => todo!(),
-        parser::GoalCommand::Unfocus => todo!(),
-        parser::GoalCommand::FocusSingle => todo!(),
-        parser::GoalCommand::UnfocusSingle => todo!(),
-        parser::GoalCommand::Rescope {
+        },
+        GoalCommand::AddEffort { effort } => GoalRequest::AddEffort {
+            goal_id: selected_goal_id,
+            effort,
+        },
+        GoalCommand::RemoveEffort { effort } => GoalRequest::RemoveEffort {
+            goal_id: selected_goal_id,
+            effort,
+        },
+        GoalCommand::Focus => GoalRequest::Focus(selected_goal_id),
+        GoalCommand::Unfocus => GoalRequest::Unfocus(selected_goal_id),
+        GoalCommand::FocusSingle => GoalRequest::FocusSingle(selected_goal_id),
+        GoalCommand::UnfocusSingle => GoalRequest::UnfocusSingle(selected_goal_id),
+        GoalCommand::Rescope {
             new_effort_to_complete,
-        } => AppCommand::GoalRequest(GoalRequest::Rescope {
+        } => GoalRequest::Rescope {
             goal_id: selected_goal_id,
             new_effort_to_complete,
-        }),
-        parser::GoalCommand::Rename { new_name } => AppCommand::GoalRequest(GoalRequest::Rename {
+        },
+        GoalCommand::Rename { new_name } => GoalRequest::Rename {
             goal_id: selected_goal_id,
             new_name,
-        }),
+        },
     };
 
-    app_state.handle_command(command).await?;
+    app_state.handle_command(command.into()).await?;
 
     Ok(true)
 }

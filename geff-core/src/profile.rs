@@ -653,7 +653,7 @@ impl Profile {
 
     pub fn focus_goal(&mut self, goal_id: GoalId) -> Option<HashSet<GoalId>> {
         visit_tree_with_predicate(&self.goals, goal_id, &mut |child_id, _| -> bool {
-            self.focused_goals.contains(&child_id)
+            !self.focused_goals.contains(&child_id)
         })
         .map(|mut child_ids_need_focusing| {
             self.focused_goals.insert(goal_id);

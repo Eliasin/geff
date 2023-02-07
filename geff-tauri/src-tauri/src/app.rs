@@ -62,6 +62,12 @@ pub enum AppCommand {
     SaveRequest,
 }
 
+impl From<GoalRequest> for AppCommand {
+    fn from(value: GoalRequest) -> Self {
+        AppCommand::GoalRequest(value)
+    }
+}
+
 pub enum AppState {
     Loaded {
         persistent_state: PersistentState<Config>,
@@ -161,6 +167,12 @@ impl AppState {
                         .with_datetime(*current_datetime)
                         .handle_request(goal_request);
                     *populated_goals = persistent_state.profile.populate_goals();
+
+                    if let Cursor::SelectedGoal(Some(selected_goal)) = cursor {
+                        if get_selected_goal_id(selected_goal, populated_goals).is_err() {
+                            *cursor = Cursor::SelectedGoal(None);
+                        }
+                    }
                 }
                 AppCommand::CursorAction(cursor_action) => {
                     cursor.handle_action(cursor_action, populated_goals)?;

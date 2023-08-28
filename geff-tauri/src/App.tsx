@@ -6,7 +6,7 @@ import {
   useCommandlineDisplayState,
 } from "./Store";
 
-import "./App.css";
+import "./App.scss";
 import { keyboardEvent, loadCommand } from "./Event";
 import { RootGoals } from "./RootGoals";
 

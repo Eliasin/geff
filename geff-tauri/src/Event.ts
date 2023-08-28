@@ -18,16 +18,17 @@ async function fetchStateThunk(dispatch: AppThunkDispatch) {
   const frontendState: FrontendState | null = await invoke("fetch");
 
   if (frontendState !== null) {
+    const goalState = frontendState.goalState;
     dispatch(
       load({
         type: "loaded",
-        populatedGoals: frontendState.populatedGoals,
-        selectedGoalId: frontendState.selectedGoalId,
-        focusedGoals: frontendState.focusedGoals,
+        populatedGoals: goalState.populatedGoals,
+        selectedGoalId: goalState.selectedGoalId,
+        focusedGoals: goalState.focusedGoals,
       })
     );
 
-    dispatch(updateDisplay(frontendState.config.display));
+    dispatch(updateDisplay(goalState.config.display));
   }
 }
 
@@ -68,10 +69,12 @@ type FrontendConfig = {
 };
 
 type FrontendState = {
-  populatedGoals: Array<PopulatedGoal>;
-  selectedGoalId?: number;
-  focusedGoals: Array<number>;
-  config: FrontendConfig;
+  goalState: {
+    populatedGoals: Array<PopulatedGoal>;
+    selectedGoalId?: number;
+    focusedGoals: Array<number>;
+    config: FrontendConfig;
+  };
 };
 
 export async function loadCommandThunk(dispatch: AppThunkDispatch) {

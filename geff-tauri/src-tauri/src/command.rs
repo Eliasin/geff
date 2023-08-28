@@ -1,4 +1,4 @@
-use crate::app::{AppCommand, AppState, FrontendAppState};
+use crate::app::{AppCommand, AppState, FrontendAppState, GoalState};
 use crate::parser::{self, GoalCommand};
 use crate::parser::{command as parse_command, ControlCommand};
 use geff_core::request::GoalRequest;
@@ -71,10 +71,13 @@ async fn handle_targeted_goal_command(
     command: GoalCommand,
 ) -> anyhow::Result<bool> {
     let selected_goal_id = if let AppState::Loaded {
-        persistent_state: _,
-        cursor: Cursor::SelectedGoal(Some(selected_goal)),
-        populated_goals,
-        current_datetime: _,
+        goal_state:
+            GoalState {
+                persistent_state: _,
+                cursor: Cursor::SelectedGoal(Some(selected_goal)),
+                populated_goals,
+                current_datetime: _,
+            },
     } = &mut *app_state
     {
         get_selected_goal_id(selected_goal, populated_goals)?

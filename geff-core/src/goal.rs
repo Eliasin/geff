@@ -59,7 +59,7 @@ pub enum GoalEvent {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GoalId(pub u32);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

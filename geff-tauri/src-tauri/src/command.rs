@@ -1,4 +1,4 @@
-use crate::app::{AppCommand, AppState, FrontendAppState, GoalState};
+use crate::app::{ActiveActivity, AppCommand, AppState, FrontendAppState, GoalState};
 use crate::parser::{self, GoalCommand};
 use crate::parser::{command as parse_command, ControlCommand};
 use geff_core::request::GoalRequest;
@@ -6,6 +6,7 @@ use geff_util::{get_selected_goal_id, Cursor, CursorAction};
 use nom::Finish;
 use std::ops::DerefMut;
 use tauri::async_runtime::Mutex;
+use tauri::Invoke;
 
 #[tauri::command]
 pub async fn load(state: tauri::State<'_, Mutex<AppState>>) -> Result<(), String> {
@@ -39,6 +40,26 @@ pub async fn cursor_action(
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn set_active_activity(
+    state: tauri::State<'_, Mutex<AppState>>,
+    new_active_activity: ActiveActivity,
+) -> Result<(), String> {
+    if let AppState::Loaded {
+        goal_state: _,
+        active_activity,
+    } = state.lock().await.deref_mut()
+    {
+        *active_activity = new_active_activity;
+    }
+
+    Ok(())
+}
+
+pub fn invoke_handler() -> impl Fn(Invoke) {
+    tauri::generate_handler![app_command, load, fetch, cursor_action, set_active_activity]
 }
 
 async fn handle_untargeted_goal_command(
@@ -78,6 +99,7 @@ async fn handle_targeted_goal_command(
                 populated_goals,
                 current_datetime: _,
             },
+        active_activity: _,
     } = &mut *app_state
     {
         get_selected_goal_id(selected_goal, populated_goals)?
@@ -157,6 +179,10 @@ pub async fn app_command(
             .await
             .map_err(|e| e.to_string()),
         parser::Command::Control(control_command) => match control_command {
+            ControlCommand::SwitchActivity(active_activity) => {
+                app_state.handle_switch_active_state(active_activity);
+                Ok(())
+            }
             ControlCommand::Quit => {
                 handle.exit(0);
 

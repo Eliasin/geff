@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   formatCommandline,
+  useActiveActivity,
   useAppDispatch,
   useCommandline,
   useCommandlineDisplayState,
@@ -46,6 +47,19 @@ function Commandline(): JSX.Element {
   );
 }
 
+function ActiveActivity(): JSX.Element | null {
+  const activeActivity = useActiveActivity();
+
+  switch (activeActivity) {
+    case "Goals": {
+      return <RootGoals />;
+    }
+    case "Help": {
+      return null;
+    }
+  }
+}
+
 function App() {
   const dispatch = useAppDispatch();
 
@@ -69,7 +83,7 @@ function App() {
     <div className="app">
       <div className="main">
         <StatusBar />
-        <RootGoals />
+        <ActiveActivity />
       </div>
       <Commandline />
     </div>

@@ -89,9 +89,18 @@ pub struct FrontendGoalState {
     pub config: Config,
 }
 
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+pub enum ActiveActivity {
+    Goals,
+    Help,
+}
+
 #[derive(Debug)]
 pub enum AppState {
-    Loaded { goal_state: GoalState },
+    Loaded {
+        goal_state: GoalState,
+        active_activity: ActiveActivity,
+    },
     Unloaded,
     Error(String),
 }
@@ -100,9 +109,21 @@ pub enum AppState {
 pub struct FrontendAppState {
     #[serde(rename = "goalState")]
     goal_state: FrontendGoalState,
+    #[serde(rename = "activeActivity")]
+    active_activity: ActiveActivity,
 }
 
 impl AppState {
+    pub fn handle_switch_active_state(&mut self, new_active_activity: ActiveActivity) {
+        if let AppState::Loaded {
+            goal_state: _,
+            active_activity,
+        } = self
+        {
+            *active_activity = new_active_activity;
+        }
+    }
+
     pub fn try_into_frontend(&self) -> Result<Option<FrontendAppState>, String> {
         let selected_goal_id = if let AppState::Loaded {
             goal_state:
@@ -112,6 +133,7 @@ impl AppState {
                     populated_goals,
                     current_datetime: _,
                 },
+            active_activity: _,
         } = self
         {
             Some(get_selected_goal_id(selected_goal, populated_goals).map_err(|e| e.to_string())?)
@@ -128,6 +150,7 @@ impl AppState {
                         populated_goals,
                         current_datetime: _,
                     },
+                active_activity,
             } = self
             {
                 let mut populated_goals = populated_goals.clone();
@@ -139,6 +162,7 @@ impl AppState {
                         focused_goals: persistent_state.profile.focused_goals().clone(),
                         config: persistent_state.config.clone(),
                     },
+                    active_activity: *active_activity,
                 })
             } else if let AppState::Error(e) = self {
                 Err(e.to_string())?
@@ -146,6 +170,36 @@ impl AppState {
                 None
             },
         )
+    }
+
+    async fn load_app_state(&mut self) -> anyhow::Result<()> {
+        let config_data_path = match PersistentGoalState::<Config>::data_path("geff-tauri") {
+            Ok(config_data_path) => config_data_path,
+            Err(e) => {
+                *self = AppState::Error(e.to_string());
+                return Ok(());
+            }
+        };
+        let persistent_state = match PersistentGoalState::<Config>::load(config_data_path).await {
+            Ok(persistent_state) => persistent_state,
+            Err(e) => {
+                *self = AppState::Error(e.to_string());
+                return Ok(());
+            }
+        };
+        let populated_goals = persistent_state.profile.populate_goals();
+
+        *self = AppState::Loaded {
+            goal_state: GoalState {
+                persistent_state,
+                cursor: Default::default(),
+                populated_goals,
+                current_datetime: Utc::now(),
+            },
+            active_activity: ActiveActivity::Help,
+        };
+
+        Ok(())
     }
 
     pub async fn handle_command(&mut self, command: AppCommand) -> anyhow::Result<()> {
@@ -157,36 +211,12 @@ impl AppState {
                     populated_goals,
                     current_datetime,
                 },
+            active_activity: _,
         } = self
         {
             match command {
                 AppCommand::LoadRequest => {
-                    let config_data_path =
-                        match PersistentGoalState::<Config>::data_path("geff-tauri") {
-                            Ok(config_data_path) => config_data_path,
-                            Err(e) => {
-                                *self = AppState::Error(e.to_string());
-                                return Ok(());
-                            }
-                        };
-                    let persistent_state =
-                        match PersistentGoalState::<Config>::load(config_data_path).await {
-                            Ok(persistent_state) => persistent_state,
-                            Err(e) => {
-                                *self = AppState::Error(e.to_string());
-                                return Ok(());
-                            }
-                        };
-                    let populated_goals = persistent_state.profile.populate_goals();
-
-                    *self = AppState::Loaded {
-                        goal_state: GoalState {
-                            persistent_state,
-                            cursor: Default::default(),
-                            populated_goals,
-                            current_datetime: Utc::now(),
-                        },
-                    };
+                    self.load_app_state().await?;
                 }
                 AppCommand::GoalRequest(goal_request) => {
                     persistent_state
@@ -241,32 +271,7 @@ impl AppState {
             Ok(())
         } else {
             if let AppCommand::LoadRequest = command {
-                let config_data_path = match PersistentGoalState::<Config>::data_path("geff-tauri")
-                {
-                    Ok(config_data_path) => config_data_path,
-                    Err(e) => {
-                        *self = AppState::Error(e.to_string());
-                        return Ok(());
-                    }
-                };
-                let persistent_state =
-                    match PersistentGoalState::<Config>::load(config_data_path).await {
-                        Ok(persistent_state) => persistent_state,
-                        Err(e) => {
-                            *self = AppState::Error(e.to_string());
-                            return Ok(());
-                        }
-                    };
-                let populated_goals = persistent_state.profile.populate_goals();
-
-                *self = AppState::Loaded {
-                    goal_state: GoalState {
-                        persistent_state,
-                        cursor: Default::default(),
-                        populated_goals,
-                        current_datetime: Utc::now(),
-                    },
-                };
+                self.load_app_state().await?;
             }
 
             Ok(())

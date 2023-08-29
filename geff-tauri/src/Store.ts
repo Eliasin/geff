@@ -117,6 +117,29 @@ export function useGoalState(): GoalStateLoaded | GoalStateUnloaded {
 
 export const { load } = goalSlice.actions;
 
+export type ActiveActivity = "Goals" | "Help";
+
+export type ActivityState = { activeActivity: ActiveActivity };
+
+const activitySlice = createSlice({
+  name: "activity",
+  initialState: { activeActivity: "Goals" } as ActivityState,
+  reducers: {
+    setActiveActivity: (
+      state: ActivityState,
+      action: PayloadAction<ActiveActivity>
+    ) => {
+      state.activeActivity = action.payload;
+    },
+  },
+});
+
+export function useActiveActivity(): ActiveActivity {
+  return useSelector((root: RootState) => root.activity.activeActivity);
+}
+
+export const { setActiveActivity } = activitySlice.actions;
+
 export type CommandlineDisplayState = {
   fontSizePixels: number;
   backgroundColor: string;
@@ -159,6 +182,7 @@ const rootReducer = combineReducers({
   commandline: commandlineSlice.reducer,
   goal: goalSlice.reducer,
   display: displaySlice.reducer,
+  activity: activitySlice.reducer,
 });
 
 const store = configureStore({ reducer: rootReducer });

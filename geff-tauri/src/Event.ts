@@ -1,7 +1,8 @@
-import { ThunkAction, ThunkDispatch } from "@reduxjs/toolkit";
+import { ThunkDispatch } from "@reduxjs/toolkit";
 import { invoke } from "@tauri-apps/api/tauri";
 import { AnyAction } from "redux";
 import {
+  ActiveActivity,
   displayError,
   DisplayState,
   handleKeyPressEvent,
@@ -9,59 +10,88 @@ import {
   PopulatedGoal,
   RootGetState,
   RootState,
+  setActiveActivity,
   update as updateDisplay,
 } from "./Store";
 
-export type AppThunkDispatch = ThunkDispatch<RootState, unknown, AnyAction>;
+export type RootThunkDispatch = ThunkDispatch<RootState, unknown, AnyAction>;
 
-async function fetchStateThunk(dispatch: AppThunkDispatch) {
-  const frontendState: FrontendState | null = await invoke("fetch");
-
-  if (frontendState !== null) {
-    const goalState = frontendState.goalState;
-    dispatch(
-      load({
-        type: "loaded",
-        populatedGoals: goalState.populatedGoals,
-        selectedGoalId: goalState.selectedGoalId,
-        focusedGoals: goalState.focusedGoals,
-      })
-    );
-
-    dispatch(updateDisplay(goalState.config.display));
-  }
-}
-
-export type CursorAction = "up" | "down" | "in" | "out";
-
-function cursorAction(action: CursorAction) {
-  async function cursorActionThunk(dispatch: AppThunkDispatch) {
-    await invoke("cursor_action", {
-      cursorAction: action,
-    });
-
-    await fetchStateThunk(dispatch);
-  }
-
-  return cursorActionThunk;
-}
-
-function invokeCommand(command: string) {
-  async function invokeCommandThunk(dispatch: AppThunkDispatch) {
-    const error = await invoke("app_command", {
-      command,
-    })
+function wrapErrorHandler(
+  target: (dispatch: RootThunkDispatch) => Promise<unknown>,
+  options?: { fetchStateAfter: boolean }
+): (dispatch: RootThunkDispatch) => Promise<void> {
+  return async function (dispatch: RootThunkDispatch) {
+    const error = await target(dispatch)
       .then(() => null)
       .catch((e) => JSON.stringify(e));
 
     if (error !== null) {
       dispatch(displayError({ error }));
     } else {
-      await fetchStateThunk(dispatch);
+      const fetchStateAfterError = options?.fetchStateAfter ?? true;
+      if (fetchStateAfterError) {
+        dispatch(fetchState());
+      }
+    }
+  };
+}
+
+function fetchState() {
+  async function fetchStateThunk(dispatch: RootThunkDispatch) {
+    const frontendState: FrontendState | null = await invoke("fetch");
+
+    if (frontendState !== null) {
+      const goalState = frontendState.goalState;
+      dispatch(
+        load({
+          type: "loaded",
+          populatedGoals: goalState.populatedGoals,
+          selectedGoalId: goalState.selectedGoalId,
+          focusedGoals: goalState.focusedGoals,
+        })
+      );
+
+      dispatch(updateDisplay(goalState.config.display));
+
+      dispatch(setActiveActivity(frontendState.activeActivity));
     }
   }
 
-  return invokeCommandThunk;
+  return wrapErrorHandler(fetchStateThunk, { fetchStateAfter: false });
+}
+
+export type CursorAction = "up" | "down" | "in" | "out";
+
+function cursorAction(action: CursorAction) {
+  async function cursorActionThunk(dispatch: RootThunkDispatch) {
+    await invoke("cursor_action", {
+      cursorAction: action,
+    });
+
+    dispatch(fetchState());
+  }
+
+  return wrapErrorHandler(cursorActionThunk);
+}
+
+function invokeSetActiveActivity(activeActivity: ActiveActivity) {
+  async function invokeSetActiveActivityThunk() {
+    await invoke("set_active_activity", {
+      newActiveActivity: activeActivity,
+    });
+  }
+
+  return wrapErrorHandler(invokeSetActiveActivityThunk);
+}
+
+function invokeAppCommand(command: string) {
+  async function invokeAppCommandThunk() {
+    return await invoke("app_command", {
+      command,
+    });
+  }
+
+  return wrapErrorHandler(invokeAppCommandThunk);
 }
 
 type FrontendConfig = {
@@ -75,9 +105,10 @@ type FrontendState = {
     focusedGoals: Array<number>;
     config: FrontendConfig;
   };
+  activeActivity: ActiveActivity;
 };
 
-export async function loadCommandThunk(dispatch: AppThunkDispatch) {
+async function loadCommandThunk(dispatch: RootThunkDispatch) {
   const error = await invoke("load")
     .then(() => null)
     .catch((e) => e);
@@ -86,27 +117,22 @@ export async function loadCommandThunk(dispatch: AppThunkDispatch) {
     dispatch(displayError(error));
   }
 
-  await fetchStateThunk(dispatch);
+  dispatch(fetchState());
 }
 
-export function loadCommand(): ThunkAction<
-  void,
-  RootState,
-  unknown,
-  AnyAction
-> {
+export function loadCommand() {
   return loadCommandThunk;
 }
 
 export function keyboardEvent(event: KeyboardEvent) {
   async function keyboardEventThunk(
-    dispatch: AppThunkDispatch,
+    dispatch: RootThunkDispatch,
     getState: RootGetState
   ) {
     const commandlineState = getState().commandline;
     if (event.key === "Enter") {
       if (commandlineState.state.type === "typing") {
-        dispatch(invokeCommand(commandlineState.state.content));
+        dispatch(invokeAppCommand(commandlineState.state.content));
       }
     }
 
@@ -114,6 +140,12 @@ export function keyboardEvent(event: KeyboardEvent) {
 
     if (commandlineState.state.type !== "typing") {
       switch (event.key) {
+        case "q": {
+          const activeActivity = getState().activity.activeActivity;
+          if (activeActivity === "Help") {
+            dispatch(invokeSetActiveActivity("Goals"));
+          }
+        }
         case "h": {
           dispatch(cursorAction("out"));
           break;

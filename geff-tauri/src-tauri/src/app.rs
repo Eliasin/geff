@@ -153,8 +153,6 @@ impl AppState {
                 active_activity,
             } = self
             {
-                let mut populated_goals = populated_goals.clone();
-                populated_goals.sort_by_key(|goal| goal.id);
                 Some(FrontendAppState {
                     goal_state: FrontendGoalState {
                         populated_goals: populated_goals.clone(),

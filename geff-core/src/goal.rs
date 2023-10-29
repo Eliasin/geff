@@ -67,7 +67,7 @@ pub struct Goal {
     name: String,
     effort_to_date: u32,
     effort_to_complete: u32,
-    children: HashSet<GoalId>,
+    children: Vec<GoalId>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -87,13 +87,21 @@ pub struct PopulatedGoal {
     pub children: Vec<PopulatedGoal>,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum GoalOperationError {
+    #[error("adding goal `{1:?}` to `{0}` failed as it `{1:?}` is already a child of `{0}`")]
+    CannotHaveDuplicateChildren(String, GoalId),
+    #[error("no child with id `{1:?}` on goal `{0}`")]
+    NoSuchChild(String, GoalId),
+}
+
 impl Goal {
     pub fn new<S: Into<String>>(name: S, effort_to_complete: u32) -> Goal {
         Goal {
             name: name.into(),
             effort_to_date: 0,
             effort_to_complete,
-            children: HashSet::new(),
+            children: Vec::new(),
         }
     }
 
@@ -124,13 +132,30 @@ impl Goal {
         self.effort_to_complete = self.effort_to_date;
     }
 
-    pub fn refine(&mut self, child: GoalId, effort_removed: u32) {
+    pub fn refine(&mut self, child: GoalId, effort_removed: u32) -> Result<(), GoalOperationError> {
         self.effort_to_complete = self.effort_to_complete.saturating_sub(effort_removed);
-        self.children.insert(child);
+        if self.children.contains(&child) {
+            return Err(GoalOperationError::CannotHaveDuplicateChildren(
+                self.name.clone(),
+                child,
+            ));
+        }
+        self.children.push(child);
+
+        Ok(())
     }
 
     pub fn remove_child(&mut self, child: GoalId) -> bool {
-        self.children.remove(&child)
+        if let Some(index) = self
+            .children
+            .iter()
+            .position(|child_elem| *child_elem == child)
+        {
+            self.children.remove(index);
+            true
+        } else {
+            false
+        }
     }
 
     pub fn finished(&self) -> bool {
@@ -149,7 +174,25 @@ impl Goal {
         self.effort_to_date
     }
 
-    pub fn children(&self) -> &HashSet<GoalId> {
+    pub fn children(&self) -> &Vec<GoalId> {
         &self.children
+    }
+
+    pub fn swap_children(
+        &mut self,
+        child_a: GoalId,
+        child_b: GoalId,
+    ) -> Result<(), GoalOperationError> {
+        if let Some(child_a_position) = self.children.iter().position(|child| *child == child_a) {
+            if let Some(child_b_position) = self.children.iter().position(|child| *child == child_b)
+            {
+                self.children.swap(child_a_position, child_b_position);
+                Ok(())
+            } else {
+                Err(GoalOperationError::NoSuchChild(self.name.clone(), child_b))
+            }
+        } else {
+            Err(GoalOperationError::NoSuchChild(self.name.clone(), child_a))
+        }
     }
 }

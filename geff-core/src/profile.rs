@@ -119,13 +119,15 @@ impl Profile {
         parent_effort_removed: u32,
     ) -> Option<GoalId> {
         let Some(parent_goal) = self.goals.get_mut(&parent_goal_id) else {
-                return None;
-            };
+            return None;
+        };
 
         let child_goal_id = GoalId(self.goal_id_count);
         self.goal_id_count += 1;
 
-        parent_goal.refine(child_goal_id, parent_effort_removed);
+        parent_goal
+            .refine(child_goal_id, parent_effort_removed)
+            .expect("newly generated goal id to be unique by definition");
 
         if self.goals.insert(child_goal_id, child_goal).is_some() {
             panic!("not to have a goal id conflict due to monotonic counter");

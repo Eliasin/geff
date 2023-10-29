@@ -51,6 +51,9 @@ function fetchState() {
         })
       );
 
+      console.debug("Fetched frontend state");
+      console.debug(goalState);
+
       dispatch(updateDisplay(goalState.config.display));
 
       dispatch(setActiveActivity(frontendState.activeActivity));
@@ -86,9 +89,12 @@ function invokeSetActiveActivity(activeActivity: ActiveActivity) {
 
 function invokeAppCommand(command: string) {
   async function invokeAppCommandThunk() {
-    return await invoke("app_command", {
+    const result = await invoke("app_command", {
       command,
     });
+    console.debug(`Invoke '${command}' returned ${JSON.stringify(result)}`);
+
+    return result;
   }
 
   return wrapErrorHandler(invokeAppCommandThunk);

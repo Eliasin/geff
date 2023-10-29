@@ -219,14 +219,25 @@ fn save_command(input: &str) -> IResult<&str, ControlCommand> {
     map(tuple((tag("w"), eof)), |_| ControlCommand::Save)(input)
 }
 
-fn help_command(input: &str) -> IResult<&str, ControlCommand> {
+fn switch_to_help_activity_command(input: &str) -> IResult<&str, ControlCommand> {
     map(tuple((tag("h"), eof)), |_| {
         ControlCommand::SwitchActivity(ActiveActivity::Help)
     })(input)
 }
 
+fn switch_to_goals_activity_command(input: &str) -> IResult<&str, ControlCommand> {
+    map(tuple((tag("g"), eof)), |_| {
+        ControlCommand::SwitchActivity(ActiveActivity::Goals)
+    })(input)
+}
+
 fn control_command(input: &str) -> IResult<&str, ControlCommand> {
-    alt((quit_command, save_command, help_command))(input)
+    alt((
+        quit_command,
+        save_command,
+        switch_to_help_activity_command,
+        switch_to_goals_activity_command,
+    ))(input)
 }
 
 #[derive(Debug, Clone)]
